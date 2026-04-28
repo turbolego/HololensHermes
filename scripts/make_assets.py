@@ -1,21 +1,15 @@
 """
 make_assets.py
 ==============
-Generates the minimum set of solid-colour PNG assets required by
-Package.appxmanifest.  Run this only if the Assets folder is missing
-or if you are bootstrapping the project from absolute scratch.
+Generates and repairs PNG assets required by Package.appxmanifest.
 
 Usage:
     python scripts/make_assets.py
 
-Output files (written to  <repo-root>/Assets/):
-    LockScreenLogo.scale-200.png          96  x  96
-    SplashScreen.scale-200.png          1240  x 600
-    Square150x150Logo.scale-200.png      300  x 300
-    Square44x44Logo.scale-200.png         88  x  88
-    Square44x44Logo.targetsize-24_altform-unplated.png   24 x 24
-    StoreLogo.png                         50  x  50
-    Wide310x150Logo.scale-200.png        620  x 300
+Behavior:
+- Creates missing assets.
+- Rewrites assets whose dimensions are wrong.
+- Generates both scale-200 names and common unscaled aliases.
 """
 
 import os
@@ -27,13 +21,19 @@ ASSETS_DIR = os.path.join(os.path.dirname(SCRIPT_DIR), "Assets")
 
 # (filename, width, height, R, G, B)
 ASSETS = [
-    ("LockScreenLogo.scale-200.png",                       96,   96, 0x7F, 0x9F, 0xFF),
-    ("SplashScreen.scale-200.png",                       1240,  600, 0x1A, 0x1A, 0x2E),
-    ("Square150x150Logo.scale-200.png",                   300,  300, 0x7F, 0x9F, 0xFF),
-    ("Square44x44Logo.scale-200.png",                      88,   88, 0x7F, 0x9F, 0xFF),
+    ("LockScreenLogo.scale-200.png",                        96,   96, 0x7F, 0x9F, 0xFF),
+    ("SplashScreen.scale-200.png",                        1240,  600, 0x1A, 0x1A, 0x2E),
+    ("Square150x150Logo.scale-200.png",                    300,  300, 0x7F, 0x9F, 0xFF),
+    ("Square44x44Logo.scale-200.png",                       88,   88, 0x7F, 0x9F, 0xFF),
     ("Square44x44Logo.targetsize-24_altform-unplated.png",  24,   24, 0x7F, 0x9F, 0xFF),
-    ("StoreLogo.png",                                       50,   50, 0x7F, 0x9F, 0xFF),
-    ("Wide310x150Logo.scale-200.png",                      620,  300, 0x7F, 0x9F, 0xFF),
+    ("StoreLogo.png",                                        50,   50, 0x7F, 0x9F, 0xFF),
+    ("Wide310x150Logo.scale-200.png",                       620,  300, 0x7F, 0x9F, 0xFF),
+
+    # Common aliases used by older manifests/project files.
+    ("SplashScreen.png",                                     620,  300, 0x1A, 0x1A, 0x2E),
+    ("Square150x150Logo.png",                                150,  150, 0x7F, 0x9F, 0xFF),
+    ("Square44x44Logo.png",                                   44,   44, 0x7F, 0x9F, 0xFF),
+    ("Wide310x150Logo.png",                                  310,  150, 0x7F, 0x9F, 0xFF),
 ]
 
 
@@ -44,12 +44,30 @@ def _png_chunk(tag: bytes, data: bytes) -> bytes:
             + struct.pack(">I", zlib.crc32(payload) & 0xFFFFFFFF))
 
 
+def _read_png_size(path: str):
+    """Return (w, h) for PNG, or None if invalid/unreadable."""
+    try:
+        with open(path, "rb") as fh:
+            sig = fh.read(8)
+            if sig != b"\x89PNG\r\n\x1a\n":
+                return None
+            length = struct.unpack(">I", fh.read(4))[0]
+            chunk_type = fh.read(4)
+            if chunk_type != b"IHDR" or length < 13:
+                return None
+            data = fh.read(length)
+            w, h = struct.unpack(">II", data[:8])
+            return (w, h)
+    except Exception:
+        return None
+
+
 def make_png(path: str, w: int, h: int, r: int, g: int, b: int) -> None:
     """Write a minimal valid solid-colour RGB PNG."""
-    sig  = b"\x89PNG\r\n\x1a\n"
+    sig = b"\x89PNG\r\n\x1a\n"
     ihdr = _png_chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
-    row  = b"\x00" + bytes([r, g, b]) * w      # filter-type 0, then RGB pixels
-    raw  = row * h
+    row = b"\x00" + bytes([r, g, b]) * w
+    raw = row * h
     idat = _png_chunk(b"IDAT", zlib.compress(raw, level=1))
     iend = _png_chunk(b"IEND", b"")
     with open(path, "wb") as fh:
@@ -58,14 +76,22 @@ def make_png(path: str, w: int, h: int, r: int, g: int, b: int) -> None:
 
 def main():
     os.makedirs(ASSETS_DIR, exist_ok=True)
-    print(f"Writing assets to:  {ASSETS_DIR}\n")
+    print(f"Writing assets to: {ASSETS_DIR}\n")
+
     for filename, w, h, r, g, b in ASSETS:
         dest = os.path.join(ASSETS_DIR, filename)
-        if os.path.exists(dest):
-            print(f"  skip (exists)  {filename}")
+        existing_size = _read_png_size(dest) if os.path.exists(dest) else None
+
+        if existing_size == (w, h):
+            print(f"  ok             {filename}  ({w}x{h})")
             continue
+
         make_png(dest, w, h, r, g, b)
-        print(f"  created        {filename}  ({w}x{h})")
+        if existing_size is None:
+            print(f"  created        {filename}  ({w}x{h})")
+        else:
+            print(f"  repaired       {filename}  {existing_size} -> ({w}x{h})")
+
     print("\nDone.")
 
 

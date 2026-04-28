@@ -46,7 +46,11 @@ namespace HololensSatelliteViewer.Services
                 }
             }
 
-            return satellites.Where(s => s.Elevation > 0.0).ToList();
+            return satellites
+                .Where(s => s.Elevation > 0.0)
+                .OrderByDescending(s => s.Elevation)
+                .Take(60)
+                .ToList();
         }
 
         private async Task EnsureTleDataAsync()
@@ -60,13 +64,15 @@ namespace HololensSatelliteViewer.Services
 
             try
             {
-                _tleRecords = await _tleService.DownloadStationTlesAsync();
+                var stations = await _tleService.DownloadStationTlesAsync();
+                var active = await _tleService.DownloadActiveTlesAsync(120);
 
-                if (_tleRecords.Count < 5)
-                {
-                    var active = await _tleService.DownloadActiveTlesAsync(30);
-                    _tleRecords.AddRange(active);
-                }
+                _tleRecords = stations
+                    .Concat(active)
+                    .GroupBy(r => r.NoradId > 0 ? r.NoradId.ToString() : r.Name)
+                    .Select(g => g.First())
+                    .Take(120)
+                    .ToList();
 
                 _lastTleUpdate = DateTime.UtcNow;
             }
