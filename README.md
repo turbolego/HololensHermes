@@ -290,13 +290,14 @@ If nothing appears: unplug, replug, and retry.
 ### Install the app
 
 ```powershell
-$pkg = "AppPackages\HoloLensHello_1.0.1.0_x86_Test"
+$pkg = "AppPackages\HololensSatelliteViewer_1.0.0.0_x86_Test"
 
 & $wadc install `
-    -f  "$pkg\HoloLensHello_1.0.1.0_x86.appx" `
+    -f  "$pkg\HololensSatelliteViewer_1.0.0.0_x86.appx" `
     -ip 127.0.0.1 `
-    -d  "$pkg\Dependencies\x86\Microsoft.VCLibs.x86.14.00.appx" `
-    -d  "$pkg\Dependencies\x86\Microsoft.NET.CoreRuntime.1.1.appx"
+    -d  "$pkg\Dependencies\x86\Microsoft.NET.Native.Framework.1.3.appx" `
+    -d  "$pkg\Dependencies\x86\Microsoft.NET.Native.Runtime.1.4.appx" `
+    -d  "$pkg\Dependencies\x86\Microsoft.VCLibs.x86.14.00.appx"
 ```
 
 Expected output:
@@ -311,11 +312,10 @@ Done.
 ### Confirm and launch
 
 ```powershell
-& $wadc list -ip 127.0.0.1 | Select-String "HoloLensHello"
-# HoloLensHello_1.0.1.0_x86__eb2h9h42x99q2
+& $wadc list -ip 127.0.0.1 | Select-String "HololensSatelliteViewer"
 ```
 
-Open the HoloLens **Start menu**, find the **HoloLensHello** tile, and air-tap.
+Open the HoloLens **Start menu**, find the **Satellite Viewer** tile, and air-tap.
 
 ---
 
@@ -324,18 +324,11 @@ Open the HoloLens **Start menu**, find the **HoloLensHello** tile, and air-tap.
 1. Edit code.
 2. Bump `Version` in `Package.appxmanifest`:
    ```xml
-   <Identity Name="HoloLensHello" Publisher="CN=HoloLensHello" Version="1.0.2.0" />
+   <Identity Name="HololensSatelliteViewer" Publisher="CN=HololensSatelliteViewer" Version="1.0.0.1" />
    ```
-3. Rebuild and redeploy (version bump causes `install` to replace the existing app):
+3. Run the deploy script again. It rebuilds, signs, uninstalls the old package if needed, and redeploys:
    ```powershell
-   & $msbuild HoloLensHello.csproj /p:Configuration=Release /p:Platform=x86 /v:minimal
-
-   $pkg = "AppPackages\HoloLensHello_1.0.2.0_x86_Test"
-   & $wadc install `
-       -f  "$pkg\HoloLensHello_1.0.2.0_x86.appx" `
-       -ip 127.0.0.1 `
-       -d  "$pkg\Dependencies\x86\Microsoft.VCLibs.x86.14.00.appx" `
-       -d  "$pkg\Dependencies\x86\Microsoft.NET.CoreRuntime.1.1.appx"
+   powershell -ExecutionPolicy Bypass -File .\deploy.ps1
    ```
 
 ---

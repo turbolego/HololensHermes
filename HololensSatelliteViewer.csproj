@@ -105,10 +105,15 @@
 
   <ItemGroup>
     <GeometryShader Include="Content\Shaders\GeometryShader.hlsl" />
+    <GeometryShader Include="Content\Shaders\TextGeometryShader.hlsl" />
     <PixelShader Include="Content\Shaders\PixelShader.hlsl" />
+    <PixelShader Include="Content\Shaders\TextPixelShader.hlsl" />
     <None Include="Content\Shaders\VertexShaderShared.hlsl" />
+    <None Include="Content\Shaders\TextVertexShaderShared.hlsl" />
     <VertexShader Include="Content\Shaders\VertexShader.hlsl" />
     <VertexShader Include="Content\Shaders\VPRTVertexShader.hlsl" />
+    <VertexShader Include="Content\Shaders\TextVertexShader.hlsl" />
+    <VertexShader Include="Content\Shaders\TextVPRTVertexShader.hlsl" />
   </ItemGroup>
 
   <PropertyGroup Condition=" '$(VisualStudioVersion)' == '' or '$(VisualStudioVersion)' &lt; '14.0' ">
