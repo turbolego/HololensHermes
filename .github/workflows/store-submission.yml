@@ -83,65 +83,39 @@ jobs:
             -FilePath "${{ github.workspace }}\HololensSatelliteViewer_TemporaryKey.pfx" `
             -Password $pwd
 
-      # ── Build Release .appx ────────────────────────────────────────
+      # ── Build Release .appxupload (Store-compatible) ──────────────
+      # UapAppxPackageBuildMode=StoreUpload + /t:Publish produces a
+      # proper .appxupload that the Store accepts — unlike the pre-compiled
+      # .NET Native packages from GenerateAppxPackageOnBuild.
       - name: Build and package Release x86
         run: >
-          msbuild HololensSatelliteViewer.csproj /m
+          msbuild HololensSatelliteViewer.csproj
+          /t:Publish
           /p:Configuration=Release
           /p:Platform=x86
-          /p:PackageCertificateKeyFile=HololensSatelliteViewer_TemporaryKey.pfx
-          /p:PackageCertificatePassword=ci
-          /p:GenerateAppxPackageOnBuild=true
+          /p:AppxBundle=Never
+          /p:UapAppxPackageBuildMode=StoreUpload
           /p:AppxPackageDir=AppPackages\
-
-      # ── Create .appxupload from the build output ──────────────────
-      # The .appxupload is a ZIP file containing the .appx + .appxsym
-      # that the Microsoft Store submission portal accepts.
-      - name: Create Store upload package (.appxupload)
-        shell: powershell
-        run: |
-          $appx = Get-ChildItem -Path "${{ github.workspace }}\AppPackages" -Recurse -Filter "*.appx" |
-            Select-Object -First 1
-          if (-not $appx) { throw "No .appx found in AppPackages/" }
-          $appxsym = Get-ChildItem -Path "${{ github.workspace }}\AppPackages" -Recurse -Filter "*.appxsym" |
-            Select-Object -First 1
-          $basePath = $appx.Directory.FullName
-          $zipPath = Join-Path $basePath "upload.zip"
-          $appxupload = Join-Path $basePath "$($appx.Directory.Name).appxupload"
-          Write-Host "Creating .appxupload at: $appxupload"
-          if ($appxsym) {
-            Compress-Archive -Path $appx.FullName, $appxsym.FullName -DestinationPath $zipPath -CompressionLevel Optimal
-          } else {
-            Compress-Archive -Path $appx.FullName -DestinationPath $zipPath -CompressionLevel Optimal
-          }
-          Move-Item -Path $zipPath -Destination $appxupload -Force
-          Write-Host "Created appxupload: $( (Get-Item $appxupload).Length ) bytes"
-          echo "appxupload_path=$appxupload" >> $env:GITHUB_ENV
+          /p:AppxPackageSigningEnabled=true
+          /p:PackageCertificateKeyFile=${{ github.workspace }}\HololensSatelliteViewer_TemporaryKey.pfx
+          /p:PackageCertificatePassword=ci
+          /p:PackageCertificateThumbprint=""
 
       - name: Remove build certificate
         if: always()
         run: Remove-Item -Path "${{ github.workspace }}\HololensSatelliteViewer_TemporaryKey.pfx" -ErrorAction SilentlyContinue
 
       # ── Run Windows App Certification Kit ────────────────────────────
-      # WACK validates the package against Store requirements.
       - name: Run Windows App Certification Kit
         shell: powershell
         run: |
-          $appxupload = Get-ChildItem -Path "${{ github.workspace }}\AppPackages" `
+          $package = Get-ChildItem -Path "${{ github.workspace }}\AppPackages" `
             -Recurse -Filter "*.appxupload" | Select-Object -First 1
-          if (-not $appxupload) {
-            Write-Host "No .appxupload found, checking for .appx..."
-            $appx = Get-ChildItem -Path "${{ github.workspace }}\AppPackages" `
-              -Recurse -Filter "*.appx" | Select-Object -First 1
-            if (-not $appx) { throw "No app package found in AppPackages/" }
-            $packagePath = $appx.FullName
-          } else {
-            $packagePath = $appxupload.FullName
-          }
-          Write-Host "Testing: $packagePath"
+          if (-not $package) { throw "No .appxupload found in AppPackages/" }
+          Write-Host "Testing: $($package.FullName)"
           & "C:\Program Files (x86)\Windows Kits\10\App Certification Kit\appcert.exe" `
             test -AppType Universal `
-            -AppxPackagePath "$packagePath" `
+            -AppxPackagePath "$($package.FullName)" `
             -ReportOutputPath "${{ github.workspace }}\WackReport.xml" `
             -DigestPath "${{ github.workspace }}\WackDigest.xml"
           Write-Host "WACK exit code: $LASTEXITCODE"
@@ -166,11 +140,10 @@ jobs:
             AppPackages/**/*.appxupload
             AppPackages/**/*.appx
             AppPackages/**/*.appxsym
-            AppPackages/**/HololensSatelliteViewer_*_x86_Test/HololensSatelliteViewer_*_x86.cer
             AppPackages/**/Dependencies/**
             AppPackages/**/Install.ps1
             AppPackages/**/Add-AppDevPackage.ps1
-          if-no-files-found: error
+          if-no-files-found: warn
 
       # ── Store submission (only on explicit 'submit' or tag push) ─────
       - name: Configure Microsoft Store CLI

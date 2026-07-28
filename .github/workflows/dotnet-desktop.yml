@@ -57,33 +57,17 @@ jobs:
 
       - name: Build and package Release x86
         run: >
-          msbuild HololensSatelliteViewer.csproj /m
+          msbuild HololensSatelliteViewer.csproj
+          /t:Publish
           /p:Configuration=Release
           /p:Platform=x86
-          /p:PackageCertificateKeyFile=HololensSatelliteViewer_TemporaryKey.pfx
-          /p:PackageCertificatePassword=ci
-          /p:GenerateAppxPackageOnBuild=true
+          /p:AppxBundle=Never
+          /p:UapAppxPackageBuildMode=StoreUpload
           /p:AppxPackageDir=AppPackages\
-
-      - name: Create .appxupload for Store submission
-        shell: powershell
-        run: |
-          $appx = Get-ChildItem -Path "${{ github.workspace }}\AppPackages" -Recurse -Filter "*.appx" |
-            Select-Object -First 1
-          if (-not $appx) { throw "No .appx found in AppPackages/" }
-          $appxsym = Get-ChildItem -Path "${{ github.workspace }}\AppPackages" -Recurse -Filter "*.appxsym" |
-            Select-Object -First 1
-          $basePath = $appx.Directory.FullName
-          $zipPath = Join-Path $basePath "upload.zip"
-          $appxupload = Join-Path $basePath "$($appx.Directory.Name).appxupload"
-          Write-Host "Creating .appxupload at: $appxupload"
-          if ($appxsym) {
-            Compress-Archive -Path $appx.FullName, $appxsym.FullName -DestinationPath $zipPath -CompressionLevel Optimal
-          } else {
-            Compress-Archive -Path $appx.FullName -DestinationPath $zipPath -CompressionLevel Optimal
-          }
-          Move-Item -Path $zipPath -Destination $appxupload -Force
-          Write-Host "Created appxupload: $( (Get-Item $appxupload).Length ) bytes"
+          /p:AppxPackageSigningEnabled=true
+          /p:PackageCertificateKeyFile=${{ github.workspace }}\HololensSatelliteViewer_TemporaryKey.pfx
+          /p:PackageCertificatePassword=ci
+          /p:PackageCertificateThumbprint=""
 
       # Remove the cert from the workspace before the artifact is captured
       - name: Remove signing certificate
@@ -91,6 +75,7 @@ jobs:
         run: Remove-Item -Path "${{ github.workspace }}\HololensSatelliteViewer_TemporaryKey.pfx" -ErrorAction SilentlyContinue
 
       - name: Upload appx artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: HololensSatelliteViewer-${{ github.sha }}-Release-x86
