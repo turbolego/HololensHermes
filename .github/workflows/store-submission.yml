@@ -48,6 +48,9 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
+      - name: NuGet restore
+        run: nuget restore HololensSatelliteViewer.sln
+
       # ── Install UWP build tools ──────────────────────────────────────
       - name: Install Windows 10 SDK 19041 and UWP MSBuild tools
         shell: powershell
