@@ -6,14 +6,14 @@
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
   IgnorableNamespaces="uap mp">
 
-  <Identity Name="HololensSatelliteViewer"
-            Publisher="CN=HololensSatelliteViewer"
+  <Identity Name="Turbolego.HololensSatelliteViewer"
+            Publisher="CN=BB1A7F2A-A87C-44C8-8C14-84C6486E7E75"
             Version="1.0.0.0" />
 
   <mp:PhoneIdentity PhoneProductId="ff6444f7-13cb-433f-b736-ebeb4dc3fb4e" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
   <Properties>
-    <DisplayName>Satellite Viewer</DisplayName>
+    <DisplayName>HololensSatelliteViewer</DisplayName>
     <PublisherDisplayName>Turbolego</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
@@ -31,7 +31,7 @@
         Executable="$targetnametoken$.exe"
         EntryPoint="HololensSatelliteViewer.AppView">
       <uap:VisualElements
-        DisplayName="Satellite Viewer"
+        DisplayName="HololensSatelliteViewer"
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png"
         Description="HoloLens Satellite Tracker"
