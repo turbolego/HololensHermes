@@ -7,35 +7,57 @@
 ![SDK 10.0.19041](https://img.shields.io/badge/Windows%20SDK-10.0.19041-blue)
 ![HoloLens 1](https://img.shields.io/badge/HoloLens-1st%20gen-blueviolet)
 
-Real-time satellite tracking and TLE visualisation for **Microsoft HoloLens 1**.
-Built with UWP / .NET Core v5.0 and no external game engine.
+Real-time satellite tracker for **Microsoft HoloLens 1** built on the UWP platform.
 
-Satellite positions are computed on device using **SGP4 propagator** from up-to-date
-Two-Line Element (TLE) sets fetched from [CelesTrak](https://celestrak.org/).
-A software-rasterised 3D view renders the overhead pass with orbital paths overlaid
-on the real world.
+Satellites are rendered as holographic 3D cubes in the dome **above** the user,
+positioned from real Two-Line Element (TLE) data fetched from
+[CelesTrak](https://celestrak.org/). A debug panel below the GPS location shows
+each satellite's name, azimuth, elevation, and relative position.
 
 ---
 
 ## Contents
 
 - [What You Will See](#what-you-will-see)
+- [How It Works](#how-it-works)
 - [Project Structure](#project-structure)
 - [Prerequisites](#prerequisites)
 - [Build](#build)
 - [Deploy to HoloLens](#deploy-to-holoLens)
 - [CI / CD](#ci--cd)
-- [Microsoft Store Submission](#microsoft-store-submission)
+- [Microsoft Store](#microsoft-store)
 - [Privacy Policy](#privacy-policy)
 
 ---
 
 ## What You Will See
 
-When the app launches on HoloLens 1, a 3D globe or orbital view of the night sky
-appears in front of you, with satellite positions plotted from current TLE data.
-Because black pixels are transparent on HoloLens's see-through display, the
-visualisation appears to **float in the real world**.
+Put on the HoloLens and launch the app:
+
+- Satellites appear as small coloured cubes **above you** in a dome arrangement,
+  their positions computed from live TLE orbital data and your GPS location.
+  The brightest (closest) 10 satellites are shown.
+- A **text panel** floats in front of you below eye level, listing:
+  - Your current **GPS coordinates**
+  - TLE data stats (loaded, propagated, above horizon)
+  - Each visible satellite's **name, azimuth, elevation, and relative X/Z position**
+- Because black pixels are transparent on HoloLens's see-through display, the
+  scene appears to **float in the real world** — no background, no window frame.
+
+---
+
+## How It Works
+
+| Step | Detail |
+|---|---|
+| **GPS** | HoloLens `Geolocator` gets the device's current lat/lon/altitude |
+| **TLE fetch** | Fetches active satellite Two-Line Elements from CelesTrak every second |
+| **Orbit propagation** | SGP4 propagator computes each satellite's topocentric azimuth, elevation, and range from the observer |
+| **Sorting** | The 10 closest satellites are selected by range |
+| **Rendering** | Direct3D 11 holographic pipeline draws each satellite as a colour-coded cube with a label above it, positioned 0.4 m to the ceiling (with some vertical spread per elevation) |
+| **Text panel** | Custom bitmap glyph rendering via a geometry shader animates the info list in 3D at a fixed offset from the user's head position |
+
+No external render engine — all rendering is custom Direct3D 11 with SharpDX.
 
 ---
 
@@ -48,18 +70,28 @@ HololensSatelliteViewer/
 │   ├── dotnet-desktop.yml      # Signed .appxupload artifact on push
 │   └── store-submission.yml    # Full Store pipeline: build, WACK, package, submit
 ├── Assets/                     # PNG logos/splash at required sizes
-├── Properties/
-│   └── AssemblyInfo.cs
-├── scripts/
-│   ├── create_cert.ps1         # Regenerate signing certificate
-│   └── make_assets.py          # Generate placeholder PNGs
-├── services/                   # SGP4 propagator + TLE fetching
+├── Common/
+│   └── DeviceResources.cs      # Direct3D device management
+├── Content/
+│   ├── SatelliteRenderer.cs    # Holographic satellite cube + text rendering
+│   ├── SpatialInputHandler.cs  # Gesture/click input
+│   └── SpinningCubeRenderer.cs # Sample cube (from template)
+├── Helpers/
+│   └── HolographicPositioning.cs  # Lat/lon/alt to world coordinates
+├── Models/
+│   └── Satellite.cs            # Satellite data model (az/el/range/name)
+├── Services/
+│   ├── GeolocationService.cs   # HoloLens GPS provider
+│   ├── OrbitService.cs         # TLE fetch + topocentric calculations
+│   ├── Sgp4Service.cs          # Kepler / simplified SGP4 propagator
+│   └── TleService.cs           # CelesTrak HTTP client
 ├── privacy/
 │   └── index.html              # Privacy policy (served via GitHub Pages)
-├── .nojekyll                   # Disable Jekyll for GitHub Pages
+├── properties/
+│   └── AssemblyInfo.cs
+├── BasicHologramMain.cs        # App lifecycle + holographic frame loop
 ├── HololensSatelliteViewer.csproj  # UWP project — .NETCore 5.0, x86
 ├── HololensSatelliteViewer_TemporaryKey.pfx  # Dev signing cert
-├── MainPage.xaml / MainPage.xaml.cs       # Main rendering view
 ├── Package.appxmanifest        # Identity, capabilities, logos
 └── deploy.ps1                  # One-shot deploy to HoloLens over USB
 ```
@@ -73,7 +105,6 @@ HololensSatelliteViewer/
 | Windows | 10 or 11 (64-bit) |
 | Visual Studio 2022 | Community (free) or higher — **UWP workload** required |
 | Windows 10 SDK | **10.0.19041.0** (included in UWP workload) |
-| Python 3 | 3.6+ — only needed for asset generation |
 | HoloLens 1 | Developer Mode enabled |
 | Cable | Micro-USB to USB-A |
 
@@ -167,7 +198,7 @@ Three GitHub Actions workflows run on `windows-2022` runners.
 | Workflow | Trigger | Produces |
 |---|---|---|
 | `dotnet.yml` | Push / PR to `master` | Compile check (Debug + Release) |
-| `dotnet-desktop.yml` | Push to `master` | Signed `.appxupload` + `.appx` artifact |
+| `dotnet-desktop.yml` | Push to `master` | Signed `.appxupload` artifact |
 | `store-submission.yml` | Tag `v*.*.*` | `.appxupload` + WACK + optional Store publish |
 
 ### `dotnet.yml` — compile check
@@ -191,16 +222,22 @@ Triggered by a `v*.*.*` git tag. Same build as above plus:
 
 ---
 
-## Microsoft Store Submission
+## Microsoft Store
 
 The `.appxupload` from the CI artifact can be uploaded directly to
 [Partner Center](https://partner.microsoft.com/dashboard).
 
 Supported architecture: **x86** (HoloLens 1).
 
+Package identity: `Turbolego.HololensSatelliteViewer`
+Publisher: `CN=BB1A7F2A-A87C-44C8-8C14-84C6486E7E75`
+
 ---
 
 ## Privacy Policy
 
-This app does not collect or transmit personal information.
+This app does not collect or transmit personal information. The location,
+webcam, and microphone capabilities are used exclusively for HoloLens platform
+operation — no data leaves the device except for public TLE requests to CelesTrak.
+
 Full policy: https://turbolego.github.io/HololensSatelliteViewer/privacy/
