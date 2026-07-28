@@ -83,8 +83,7 @@ jobs:
             -FilePath "${{ github.workspace }}\HololensSatelliteViewer_TemporaryKey.pfx" `
             -Password $pwd
 
-      # ── Build Release .appxupload ────────────────────────────────────
-      # GenerateAppxPackageOnBuild=true produces the .appxupload in AppPackages/
+      # ── Build Release .appx ────────────────────────────────────────
       - name: Build and package Release x86
         run: >
           msbuild HololensSatelliteViewer.csproj /m
@@ -93,6 +92,26 @@ jobs:
           /p:PackageCertificateKeyFile=HololensSatelliteViewer_TemporaryKey.pfx
           /p:PackageCertificatePassword=ci
           /p:GenerateAppxPackageOnBuild=true
+          /p:AppxPackageDir=AppPackages\
+
+      # ── Create .appxupload from the build output ──────────────────
+      # MakeAppx.exe packs the _Test folder into a single .appxupload
+      # that the Microsoft Store submission portal accepts.
+      - name: Create Store upload package (.appxupload)
+        shell: powershell
+        run: |
+          $testFolder = Get-ChildItem -Path "${{ github.workspace }}\AppPackages" `
+            -Directory | Where-Object { $_.Name -like '*_Test' } |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $testFolder) { throw "No _Test folder found in AppPackages/" }
+          $appxupload = Join-Path $testFolder.FullName "$($testFolder.Name).appxupload"
+          Write-Host "Creating .appxupload at: $appxupload"
+          & "C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x86\makeappx.exe" `
+            pack /d $testFolder.FullName /p $appxupload /l
+          if ($LASTEXITCODE -ne 0) { throw "MakeAppx failed with exit code $LASTEXITCODE" }
+          Write-Host "Created appxupload: $( (Get-Item $appxupload).Length ) bytes"
+          # Set output variable for subsequent steps
+          echo "appxupload_path=$appxupload" >> $env:GITHUB_ENV
 
       - name: Remove build certificate
         if: always()
@@ -137,7 +156,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: HololensSatelliteViewer-${{ github.sha }}-Store-x86
-          path: AppPackages/**
+          path: |
+            AppPackages/**/*.appxupload
+            AppPackages/**/*.appx
+            AppPackages/**/*.appxsym
+            AppPackages/**/HololensSatelliteViewer_*_x86_Test/HololensSatelliteViewer_*_x86.cer
+            AppPackages/**/Dependencies/**
+            AppPackages/**/Install.ps1
+            AppPackages/**/Add-AppDevPackage.ps1
           if-no-files-found: error
 
       # ── Store submission (only on explicit 'submit' or tag push) ─────

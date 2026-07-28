@@ -63,6 +63,21 @@ jobs:
           /p:PackageCertificateKeyFile=HololensSatelliteViewer_TemporaryKey.pfx
           /p:PackageCertificatePassword=ci
           /p:GenerateAppxPackageOnBuild=true
+          /p:AppxPackageDir=AppPackages\
+
+      - name: Create .appxupload for Store submission
+        shell: powershell
+        run: |
+          $testFolder = Get-ChildItem -Path "${{ github.workspace }}\AppPackages" -Directory |
+            Where-Object { $_.Name -like '*_Test' } |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $testFolder) { throw "No _Test folder found in AppPackages/" }
+          $appxupload = Join-Path $testFolder.FullName "$($testFolder.Name).appxupload"
+          Write-Host "Creating .appxupload at: $appxupload"
+          & "C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x86\makeappx.exe" `
+            pack /d $testFolder.FullName /p $appxupload /l
+          if ($LASTEXITCODE -ne 0) { throw "MakeAppx failed with exit code $LASTEXITCODE" }
+          Write-Host "Created appxupload: $( (Get-Item $appxupload).Length ) bytes"
 
       # Remove the cert from the workspace before the artifact is captured
       - name: Remove signing certificate
@@ -73,5 +88,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: HololensSatelliteViewer-${{ github.sha }}-Release-x86
-          path: AppPackages/**/*
+          path: |
+            AppPackages/**/*.appxupload
+            AppPackages/**/*.appx
+            AppPackages/**/*.appxsym
+            AppPackages/**/Dependencies/**
+            AppPackages/**/Install.ps1
+            AppPackages/**/Add-AppDevPackage.ps1
           if-no-files-found: error
