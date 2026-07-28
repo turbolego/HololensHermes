@@ -45,7 +45,7 @@ jobs:
         run: |
           $cert = New-SelfSignedCertificate `
             -Type Custom `
-            -Subject "CN=HololensSatelliteViewer" `
+            -Subject "CN=BB1A7F2A-A87C-44C8-8C14-84C6486E7E75" `
             -KeyUsage DigitalSignature `
             -FriendlyName "HololensSatelliteViewer" `
             -CertStoreLocation "Cert:\CurrentUser\My" `
