@@ -1,7 +1,7 @@
 """
 regenerate_refs.py
 ==================
-Rewrites the <Reference> ItemGroup in HoloLensHello.csproj so that every
+Rewrites the <Reference> ItemGroup in HololensSatelliteViewer.csproj so that every
 HintPath points at the UWP NuGet packages on the current machine.
 
 Run this once after cloning if Visual Studio is installed to a drive or
@@ -25,7 +25,7 @@ import xml.etree.ElementTree as ET
 
 SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT   = os.path.dirname(SCRIPT_DIR)
-CSPROJ_PATH = os.path.join(REPO_ROOT, "HoloLensHello.csproj")
+CSPROJ_PATH = os.path.join(REPO_ROOT, "HololensSatelliteViewer.csproj")
 
 # Installed by the UWP workload of VS 2022
 UWP_NUGET_PACKAGES = r"C:\Program Files (x86)\Microsoft SDKs\UWPNuGetPackages"
@@ -46,7 +46,7 @@ def check_prerequisites():
     for path, label in [
         (UWP_NUGET_PACKAGES, "UWP NuGet packages"),
         (LOCK_FILE,          ".NETCore v5.0 project.lock.json"),
-        (CSPROJ_PATH,        "HoloLensHello.csproj"),
+        (CSPROJ_PATH,        "HololensSatelliteViewer.csproj"),
     ]:
         exists = os.path.exists(path)
         print(f"{'OK  ' if exists else 'MISS'} {label}")
@@ -140,7 +140,7 @@ def update_csproj(resolved):
 # ?? Main ??????????????????????????????????????????????????????????????????????
 
 def main():
-    print("=== HoloLensHello reference regenerator ===\n")
+    print("=== HololensSatelliteViewer reference regenerator ===\n")
 
     print("Checking prerequisites...")
     if not check_prerequisites():
@@ -157,15 +157,15 @@ def main():
     resolved, missing = resolve_to_local_paths(canonical)
     print(f"  Resolved: {len(resolved)}   Missing: {len(missing)}")
     if missing:
-        print("\nWARNING — could not resolve:")
+        print("\nWARNING ï¿½ could not resolve:")
         for n, p in missing:
             print(f"  {n}  (from {p})")
 
     print(f"\nUpdating {CSPROJ_PATH} ...")
     update_csproj(resolved)
-    print(f"Done — {len(resolved)} <Reference> entries written.\n")
+    print(f"Done ï¿½ {len(resolved)} <Reference> entries written.\n")
     print("Next step: re-run the build.")
-    print("  msbuild HoloLensHello.csproj /p:Configuration=Release /p:Platform=x86")
+    print("  msbuild HololensSatelliteViewer.csproj /p:Configuration=Release /p:Platform=x86")
 
 
 if __name__ == "__main__":

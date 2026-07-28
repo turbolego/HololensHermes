@@ -16,7 +16,7 @@ if (-not $ProjectPath) {
 }
 
 if (-not $CertificatePath) {
-    $CertificatePath = Join-Path $PSScriptRoot 'HoloLensHello_TemporaryKey.pfx'
+    $CertificatePath = Join-Path $PSScriptRoot 'HololensSatelliteViewer_TemporaryKey.pfx'
 }
 
 function Get-MsBuildPath {

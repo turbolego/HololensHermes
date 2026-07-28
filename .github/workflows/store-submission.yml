@@ -1,0 +1,186 @@
+# Builds a Store-signed .appxupload and submits it to the Microsoft Store.
+#
+# Prerequisites (set up once):
+#   1. Register as a Windows developer in Partner Center
+#   2. Create/associate an Azure AD tenant with Partner Center
+#   3. Register a Microsoft Entra application and assign "Manager" role
+#   4. Add these secrets to the repo:
+#      - AZURE_AD_TENANT_ID       (from Entra > Overview > Tenant ID)
+#      - AZURE_AD_CLIENT_ID       (from Entra > App registrations > your app)
+#      - AZURE_AD_CLIENT_SECRET   (from App > Certificates & secrets)
+#      - SELLER_ID                (from Partner Center > Account settings > Identifiers)
+#   5. The app must already exist in Partner Center with at least one
+#      submission (even a draft with the correct package info).
+#
+# See: https://learn.microsoft.com/windows/apps/publish/msstore-dev-cli/github-actions
+#
+# WARNING: App update operations currently support free products only.
+# Paid products will be supported in a future MSStore CLI release.
+
+name: Store Submission
+
+on:
+  # Manual trigger: choose 'package-only' to just build, or 'submit' to go all the way
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Store action'
+        required: true
+        default: 'submit'
+        type: choice
+        options:
+          - package-only   # Build + validate, upload artifact only
+          - submit         # Build + validate + publish to Store
+
+  # Or trigger automatically when a release tag is pushed (e.g. v1.0.1)
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  store-package:
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      # ── Install UWP build tools ──────────────────────────────────────
+      - name: Install Windows 10 SDK 19041 and UWP MSBuild tools
+        shell: powershell
+        run: |
+          $vswhere   = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vsPath    = & $vswhere -latest -products * -property installationPath
+          $installer = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vs_installer.exe"
+          & $installer modify `
+            --installPath "$vsPath" `
+            --add Microsoft.VisualStudio.Component.Windows10SDK.19041 `
+            --add Microsoft.VisualStudio.ComponentGroup.UWP.MSBuild `
+            --quiet --norestart --force
+          if ($LASTEXITCODE -notin @(0, 3010)) { exit $LASTEXITCODE }
+
+      # ── Generate a temporary cert for building ───────────────────────
+      # The Store-signed package will be re-signed by Partner Center;
+      # we just need something to get past MSBuild's signing requirement.
+      - name: Create build signing certificate
+        shell: powershell
+        run: |
+          $cert = New-SelfSignedCertificate `
+            -Type Custom `
+            -Subject "CN=HololensSatelliteViewer" `
+            -KeyUsage DigitalSignature `
+            -FriendlyName "HololensSatelliteViewer" `
+            -CertStoreLocation "Cert:\CurrentUser\My" `
+            -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3","2.5.29.19={text}")
+          $pwd = ConvertTo-SecureString -String "ci" -Force -AsPlainText
+          Export-PfxCertificate -Cert $cert `
+            -FilePath "${{ github.workspace }}\HololensSatelliteViewer_TemporaryKey.pfx" `
+            -Password $pwd
+
+      # ── Build Release .appxupload ────────────────────────────────────
+      # GenerateAppxPackageOnBuild=true produces the .appxupload in AppPackages/
+      - name: Build and package Release x86
+        run: >
+          msbuild HololensSatelliteViewer.csproj /m
+          /p:Configuration=Release
+          /p:Platform=x86
+          /p:PackageCertificateKeyFile=HololensSatelliteViewer_TemporaryKey.pfx
+          /p:PackageCertificatePassword=ci
+          /p:GenerateAppxPackageOnBuild=true
+
+      - name: Remove build certificate
+        if: always()
+        run: Remove-Item -Path "${{ github.workspace }}\HololensSatelliteViewer_TemporaryKey.pfx" -ErrorAction SilentlyContinue
+
+      # ── Run Windows App Certification Kit ────────────────────────────
+      # WACK validates the package against Store requirements.
+      - name: Run Windows App Certification Kit
+        shell: powershell
+        run: |
+          $appxupload = Get-ChildItem -Path "${{ github.workspace }}\AppPackages" `
+            -Recurse -Filter "*.appxupload" | Select-Object -First 1
+          if (-not $appxupload) {
+            Write-Host "No .appxupload found, checking for .appx..."
+            $appx = Get-ChildItem -Path "${{ github.workspace }}\AppPackages" `
+              -Recurse -Filter "*.appx" | Select-Object -First 1
+            if (-not $appx) { throw "No app package found in AppPackages/" }
+            $packagePath = $appx.FullName
+          } else {
+            $packagePath = $appxupload.FullName
+          }
+          Write-Host "Testing: $packagePath"
+          & "C:\Program Files (x86)\Windows Kits\10\App Certification Kit\appcert.exe" `
+            test -AppType Universal `
+            -AppxPackagePath "$packagePath" `
+            -ReportOutputPath "${{ github.workspace }}\WackReport.xml" `
+            -DigestPath "${{ github.workspace }}\WackDigest.xml"
+          Write-Host "WACK exit code: $LASTEXITCODE"
+
+      - name: Upload WACK report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WACK-Report
+          path: |
+            WackReport.xml
+            WackDigest.xml
+          if-no-files-found: ignore
+
+      # ── Upload app package as artifact ───────────────────────────────
+      - name: Upload appxupload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HololensSatelliteViewer-${{ github.sha }}-Store-x86
+          path: AppPackages/**
+          if-no-files-found: error
+
+      # ── Store submission (only on explicit 'submit' or tag push) ─────
+      - name: Configure Microsoft Store CLI
+        if: >
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'submit')
+          || github.event_name == 'push'
+        uses: microsoft/microsoft-store-apppublisher@v1.1
+
+      - name: Reconfigure store credentials
+        if: >
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'submit')
+          || github.event_name == 'push'
+        shell: pwsh
+        env:
+          TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
+          SELLER_ID: ${{ secrets.SELLER_ID }}
+          CLIENT_ID: ${{ secrets.AZURE_AD_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.AZURE_AD_CLIENT_SECRET }}
+        run: |
+          msstore reconfigure `
+            --tenantId "$env:TENANT_ID" `
+            --sellerId "$env:SELLER_ID" `
+            --clientId "$env:CLIENT_ID" `
+            --clientSecret "$env:CLIENT_SECRET"
+
+      - name: Publish app package to Microsoft Store
+        if: >
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'submit')
+          || github.event_name == 'push'
+        shell: pwsh
+        run: |
+          # Find the product ID from the manifest
+          $manifest = [xml](Get-Content "${{ github.workspace }}\Package.appxmanifest")
+          $identity = $manifest.Package.Identity
+          $appName = $identity.Name
+          Write-Host "Publishing app: $appName (Version: $($identity.Version))"
+          # Find the .appxupload
+          $upload = Get-ChildItem -Path "${{ github.workspace }}\AppPackages" `
+            -Recurse -Filter "*.appxupload" | Select-Object -First 1
+          if ($upload) {
+            msstore publish $upload.FullName -id $appName
+          } else {
+            # Fall back: submit the AppPackages folder for UWP submissions
+            msstore submission create -id $appName
+            msstore submission upload -id $appName `
+              -package "${{ github.workspace }}\AppPackages\**\*.appx"
+            msstore submission publish -id $appName
+          }

@@ -1,7 +1,9 @@
-# Builds a signed Release .appx and uploads it as a workflow artifact.
+# Builds a signed Release .appxupload and uploads it as a workflow artifact.
 # Runs on every push to master (not on pull-requests).
 # No secrets required: a fresh self-signed certificate is generated per run.
-# To deploy: download the artifact and sideload via WinAppDeployCmd or Device Portal.
+# For Store submission see store-submission.yml.
+#
+# To sideload: download the artifact and deploy via WinAppDeployCmd or Device Portal.
 
 name: UWP Package
 
@@ -20,7 +22,6 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      # Same WMC1006 fix as dotnet.yml — see that file for explanation.
       - name: Install Windows 10 SDK 19041 and UWP MSBuild tools
         shell: powershell
         run: |
@@ -37,36 +38,37 @@ jobs:
       # Generate a throw-away self-signed cert for this run.
       # The password "ci" overrides the <PackageCertificatePassword> in the .csproj.
       - name: Create signing certificate
+        shell: powershell
         run: |
           $cert = New-SelfSignedCertificate `
             -Type Custom `
-            -Subject "CN=HoloLensHello" `
+            -Subject "CN=HololensSatelliteViewer" `
             -KeyUsage DigitalSignature `
-            -FriendlyName "HoloLensHello" `
+            -FriendlyName "HololensSatelliteViewer" `
             -CertStoreLocation "Cert:\CurrentUser\My" `
             -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3","2.5.29.19={text}")
           $pwd = ConvertTo-SecureString -String "ci" -Force -AsPlainText
           Export-PfxCertificate -Cert $cert `
-            -FilePath "${{ github.workspace }}\HoloLensHello_TemporaryKey.pfx" `
+            -FilePath "${{ github.workspace }}\HololensSatelliteViewer_TemporaryKey.pfx" `
             -Password $pwd
 
       - name: Build and package Release x86
         run: >
-          msbuild HoloLensHello.csproj /m
+          msbuild HololensSatelliteViewer.csproj /m
           /p:Configuration=Release
           /p:Platform=x86
-          /p:PackageCertificateKeyFile=HoloLensHello_TemporaryKey.pfx
+          /p:PackageCertificateKeyFile=HololensSatelliteViewer_TemporaryKey.pfx
           /p:PackageCertificatePassword=ci
           /p:GenerateAppxPackageOnBuild=true
 
       # Remove the cert from the workspace before the artifact is captured
       - name: Remove signing certificate
         if: always()
-        run: Remove-Item -Path "${{ github.workspace }}\HoloLensHello_TemporaryKey.pfx" -ErrorAction SilentlyContinue
+        run: Remove-Item -Path "${{ github.workspace }}\HololensSatelliteViewer_TemporaryKey.pfx" -ErrorAction SilentlyContinue
 
       - name: Upload appx artifact
         uses: actions/upload-artifact@v4
         with:
-          name: HoloLensHello-${{ github.sha }}-Release-x86
-          path: AppPackages/**/*.appx
+          name: HololensSatelliteViewer-${{ github.sha }}-Release-x86
+          path: AppPackages/**/*
           if-no-files-found: error
