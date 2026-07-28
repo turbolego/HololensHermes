@@ -73,13 +73,16 @@ jobs:
           if (-not $appx) { throw "No .appx found in AppPackages/" }
           $appxsym = Get-ChildItem -Path "${{ github.workspace }}\AppPackages" -Recurse -Filter "*.appxsym" |
             Select-Object -First 1
-          $appxupload = Join-Path $appx.Directory.FullName "$($appx.Directory.Name).appxupload"
+          $basePath = $appx.Directory.FullName
+          $zipPath = Join-Path $basePath "upload.zip"
+          $appxupload = Join-Path $basePath "$($appx.Directory.Name).appxupload"
           Write-Host "Creating .appxupload at: $appxupload"
           if ($appxsym) {
-            Compress-Archive -Path $appx.FullName, $appxsym.FullName -DestinationPath $appxupload -CompressionLevel Optimal
+            Compress-Archive -Path $appx.FullName, $appxsym.FullName -DestinationPath $zipPath -CompressionLevel Optimal
           } else {
-            Compress-Archive -Path $appx.FullName -DestinationPath $appxupload -CompressionLevel Optimal
+            Compress-Archive -Path $appx.FullName -DestinationPath $zipPath -CompressionLevel Optimal
           }
+          Move-Item -Path $zipPath -Destination $appxupload -Force
           Write-Host "Created appxupload: $( (Get-Item $appxupload).Length ) bytes"
 
       # Remove the cert from the workspace before the artifact is captured
