@@ -14,7 +14,7 @@
 
   <Properties>
     <DisplayName>Satellite Viewer</DisplayName>
-    <PublisherDisplayName>Developer</PublisherDisplayName>
+    <PublisherDisplayName>Turbolego</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
 
