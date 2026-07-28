@@ -68,15 +68,18 @@ jobs:
       - name: Create .appxupload for Store submission
         shell: powershell
         run: |
-          $testFolder = Get-ChildItem -Path "${{ github.workspace }}\AppPackages" -Directory |
-            Where-Object { $_.Name -like '*_Test' } |
-            Sort-Object LastWriteTime -Descending | Select-Object -First 1
-          if (-not $testFolder) { throw "No _Test folder found in AppPackages/" }
-          $appxupload = Join-Path $testFolder.FullName "$($testFolder.Name).appxupload"
+          $appx = Get-ChildItem -Path "${{ github.workspace }}\AppPackages" -Recurse -Filter "*.appx" |
+            Select-Object -First 1
+          if (-not $appx) { throw "No .appx found in AppPackages/" }
+          $appxsym = Get-ChildItem -Path "${{ github.workspace }}\AppPackages" -Recurse -Filter "*.appxsym" |
+            Select-Object -First 1
+          $appxupload = Join-Path $appx.Directory.FullName "$($appx.Directory.Name).appxupload"
           Write-Host "Creating .appxupload at: $appxupload"
-          & "C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x86\makeappx.exe" `
-            pack /d $testFolder.FullName /p $appxupload /l
-          if ($LASTEXITCODE -ne 0) { throw "MakeAppx failed with exit code $LASTEXITCODE" }
+          if ($appxsym) {
+            Compress-Archive -Path $appx.FullName, $appxsym.FullName -DestinationPath $appxupload -CompressionLevel Optimal
+          } else {
+            Compress-Archive -Path $appx.FullName -DestinationPath $appxupload -CompressionLevel Optimal
+          }
           Write-Host "Created appxupload: $( (Get-Item $appxupload).Length ) bytes"
 
       # Remove the cert from the workspace before the artifact is captured
