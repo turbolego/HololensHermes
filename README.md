@@ -13,6 +13,9 @@ Satellites are rendered as holographic 3D cubes in the dome **above** the user,
 positioned from real Two-Line Element (TLE) data fetched from
 [CelesTrak](https://celestrak.org/). A debug panel below the GPS location shows
 each satellite's name, azimuth, elevation, and relative position.
+---
+
+<img width="1408" height="792" alt="2953" src="https://github.com/user-attachments/assets/d827aa66-2a03-4f56-a6e5-423079ef0861" />
 
 ---
 
