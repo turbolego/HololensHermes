@@ -210,15 +210,16 @@ jobs:
           $identity = $manifest.Package.Identity
           $appName = $identity.Name
           Write-Host "Publishing app: $appName (Version: $($identity.Version))"
-          # Find the .appxupload
-          $upload = Get-ChildItem -Path "${{ github.workspace }}\AppPackages" `
-            -Recurse -Filter "*.appxupload" | Select-Object -First 1
-          if ($upload) {
-            msstore publish $upload.FullName -id $appName
-          } else {
-            # Fall back: submit the AppPackages folder for UWP submissions
-            msstore submission create -id $appName
-            msstore submission upload -id $appName `
-              -package "${{ github.workspace }}\AppPackages\**\*.appx"
-            msstore submission publish -id $appName
+          # msstore publish expects a package path; publishing .appxupload fails in CI.
+          $appx = Get-ChildItem -Path "${{ github.workspace }}\AppPackages" `
+            -Recurse -Filter "*.appx" |
+            Where-Object { $_.FullName -notmatch '\\Dependencies\\' } |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+
+          if (-not $appx) {
+            Write-Error "No .appx package found in AppPackages/."
           }
+
+          Write-Host "Submitting package: $($appx.FullName)"
+          msstore publish "$($appx.FullName)" -id $appName
