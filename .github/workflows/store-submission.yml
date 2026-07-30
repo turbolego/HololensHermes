@@ -107,6 +107,20 @@ jobs:
             -FilePath "${{ github.workspace }}\HololensSatelliteViewer_TemporaryKey.pfx" `
             -Password $pwd
 
+      - name: Auto-increment package version for this run
+        shell: pwsh
+        run: |
+          $manifestPath = "${{ github.workspace }}\Package.appxmanifest"
+          $manifest = [xml](Get-Content $manifestPath)
+          $current = [Version]$manifest.Package.Identity.Version
+
+          # Microsoft Store requires the 4th segment (revision) to be 0.
+          $next = "{0}.{1}.{2}.0" -f $current.Major, $current.Minor, ($current.Build + 1)
+          $manifest.Package.Identity.Version = $next
+          $manifest.Save($manifestPath)
+
+          Write-Host "Bumped package version: $($current.ToString()) -> $next"
+
       - name: Validate manifest version for Store
         shell: pwsh
         run: |
