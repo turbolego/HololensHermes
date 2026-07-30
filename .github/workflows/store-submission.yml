@@ -210,16 +210,6 @@ jobs:
           $identity = $manifest.Package.Identity
           $appName = $identity.Name
           Write-Host "Publishing app: $appName (Version: $($identity.Version))"
-          # msstore publish expects a package path; publishing .appxupload fails in CI.
-          $appx = Get-ChildItem -Path "${{ github.workspace }}\AppPackages" `
-            -Recurse -Filter "*.appx" |
-            Where-Object { $_.FullName -notmatch '\\Dependencies\\' } |
-            Sort-Object LastWriteTime -Descending |
-            Select-Object -First 1
-
-          if (-not $appx) {
-            Write-Error "No .appx package found in AppPackages/."
-          }
-
-          Write-Host "Submitting package: $($appx.FullName)"
-          msstore publish "$($appx.FullName)" -id $appName
+          # For UWP projects, msstore publish expects a project path, not a package file path.
+          Write-Host "Submitting from project root: ${{ github.workspace }}"
+          msstore publish "${{ github.workspace }}" -id $appName
