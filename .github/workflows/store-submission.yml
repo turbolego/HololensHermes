@@ -9,7 +9,7 @@
 #      - AZURE_AD_CLIENT_ID       (from Entra > App registrations > your app)
 #      - AZURE_AD_CLIENT_SECRET   (from App > Certificates & secrets)
 #      - SELLER_ID                (from Partner Center > Account settings > Identifiers)
-#      - STORE_APP_ID             (optional, recommended: Store app/product ID like 9NBL...)
+#      - STORE_APP_ID             (Store app/product ID, e.g. 9NBL..., required for CI submit)
 #   5. The app must already exist in Partner Center with at least one
 #      submission (even a draft with the correct package info).
 #
@@ -56,12 +56,14 @@ jobs:
           SELLER_ID: ${{ secrets.SELLER_ID }}
           CLIENT_ID: ${{ secrets.AZURE_AD_CLIENT_ID || secrets.AZURE_AD_APPLICATION_CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.AZURE_AD_CLIENT_SECRET || secrets.AZURE_AD_APPLICATION_SECRET }}
+          STORE_APP_ID: ${{ secrets.STORE_APP_ID }}
         run: |
           $missing = @()
           if ([string]::IsNullOrWhiteSpace($env:TENANT_ID)) { $missing += 'AZURE_AD_TENANT_ID' }
           if ([string]::IsNullOrWhiteSpace($env:SELLER_ID)) { $missing += 'SELLER_ID' }
           if ([string]::IsNullOrWhiteSpace($env:CLIENT_ID)) { $missing += 'AZURE_AD_CLIENT_ID (or AZURE_AD_APPLICATION_CLIENT_ID)' }
           if ([string]::IsNullOrWhiteSpace($env:CLIENT_SECRET)) { $missing += 'AZURE_AD_CLIENT_SECRET (or AZURE_AD_APPLICATION_SECRET)' }
+          if ([string]::IsNullOrWhiteSpace($env:STORE_APP_ID)) { $missing += 'STORE_APP_ID (Store app/product ID, e.g. 9NBL...)' }
 
           if ($missing.Count -gt 0) {
             Write-Error ("Missing required repository secret(s): " + ($missing -join ', '))
@@ -227,11 +229,5 @@ jobs:
 
           Write-Host "Submitting package: $msixUpload"
 
-          if ([string]::IsNullOrWhiteSpace($env:STORE_APP_ID)) {
-            Write-Host "STORE_APP_ID secret not set; publishing without explicit AppId."
-            msstore publish "$msixUpload" --verbose
-          }
-          else {
-            Write-Host "Using explicit Store AppId from STORE_APP_ID secret."
-            msstore publish "$msixUpload" --appId "$env:STORE_APP_ID" --verbose
-          }
+          Write-Host "Using explicit Store AppId from STORE_APP_ID secret."
+          msstore publish "$msixUpload" --appId "$env:STORE_APP_ID" --verbose
