@@ -122,10 +122,12 @@ jobs:
             -AppxPackagePath "$($package.FullName)" `
             -ReportOutputPath "${{ github.workspace }}\WackReport.xml" `
             -DigestPath "${{ github.workspace }}\WackDigest.xml"
-          Write-Host "WACK exit code: $LASTEXITCODE"
-          if ($LASTEXITCODE -ne 0) {
+          $wackExitCode = $LASTEXITCODE
+          Write-Host "WACK exit code: $wackExitCode"
+          if ($wackExitCode -ne 0) {
             Write-Warning "WACK failed on CI for .appxupload; Partner Center certification remains authoritative."
           }
+          exit 0
 
       - name: Upload WACK report
         if: always()
@@ -153,6 +155,27 @@ jobs:
           if-no-files-found: warn
 
       # ── Store submission (only on explicit 'submit' or tag push) ─────
+      - name: Validate Store submission secrets
+        if: >
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'submit')
+          || github.event_name == 'push'
+        shell: pwsh
+        env:
+          TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
+          SELLER_ID: ${{ secrets.SELLER_ID }}
+          CLIENT_ID: ${{ secrets.AZURE_AD_CLIENT_ID || secrets.AZURE_AD_APPLICATION_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.AZURE_AD_CLIENT_SECRET || secrets.AZURE_AD_APPLICATION_SECRET }}
+        run: |
+          $missing = @()
+          if ([string]::IsNullOrWhiteSpace($env:TENANT_ID)) { $missing += 'AZURE_AD_TENANT_ID' }
+          if ([string]::IsNullOrWhiteSpace($env:SELLER_ID)) { $missing += 'SELLER_ID' }
+          if ([string]::IsNullOrWhiteSpace($env:CLIENT_ID)) { $missing += 'AZURE_AD_CLIENT_ID (or AZURE_AD_APPLICATION_CLIENT_ID)' }
+          if ([string]::IsNullOrWhiteSpace($env:CLIENT_SECRET)) { $missing += 'AZURE_AD_CLIENT_SECRET (or AZURE_AD_APPLICATION_SECRET)' }
+
+          if ($missing.Count -gt 0) {
+            Write-Error ("Missing required repository secret(s): " + ($missing -join ', '))
+          }
+
       - name: Configure Microsoft Store CLI
         if: >
           (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'submit')
@@ -167,8 +190,8 @@ jobs:
         env:
           TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
           SELLER_ID: ${{ secrets.SELLER_ID }}
-          CLIENT_ID: ${{ secrets.AZURE_AD_CLIENT_ID }}
-          CLIENT_SECRET: ${{ secrets.AZURE_AD_CLIENT_SECRET }}
+          CLIENT_ID: ${{ secrets.AZURE_AD_CLIENT_ID || secrets.AZURE_AD_APPLICATION_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.AZURE_AD_CLIENT_SECRET || secrets.AZURE_AD_APPLICATION_SECRET }}
         run: |
           msstore reconfigure `
             --tenantId "$env:TENANT_ID" `
