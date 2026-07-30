@@ -107,6 +107,16 @@ jobs:
             -FilePath "${{ github.workspace }}\HololensSatelliteViewer_TemporaryKey.pfx" `
             -Password $pwd
 
+      - name: Validate manifest version for Store
+        shell: pwsh
+        run: |
+          $manifest = [xml](Get-Content "${{ github.workspace }}\Package.appxmanifest")
+          $version = [Version]$manifest.Package.Identity.Version
+          if ($version.Revision -ne 0) {
+            Write-Error "Package.appxmanifest Identity Version '$version' is invalid for Store submit. The 4th segment (revision) must be 0."
+          }
+          Write-Host "Store-compatible package version: $version"
+
       # ── Build Release .appxupload (Store-compatible) ──────────────
       # UapAppxPackageBuildMode=StoreUpload + /t:Publish produces a
       # proper .appxupload that the Store accepts — unlike the pre-compiled
