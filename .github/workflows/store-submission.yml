@@ -210,6 +210,18 @@ jobs:
           $identity = $manifest.Package.Identity
           $appName = $identity.Name
           Write-Host "Publishing app: $appName (Version: $($identity.Version))"
-          # For UWP projects, msstore publish expects a project path, not a package file path.
-          Write-Host "Submitting from project root: ${{ github.workspace }}"
-          msstore publish "${{ github.workspace }}" -id $appName
+          $upload = Get-ChildItem -Path "${{ github.workspace }}\AppPackages" `
+            -Recurse -Filter "*.appxupload" |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+
+          if (-not $upload) {
+            Write-Error "No .appxupload package found in AppPackages/."
+          }
+
+          # msstore file publisher recognizes .msixupload; mirror the generated upload package.
+          $msixUpload = [System.IO.Path]::ChangeExtension($upload.FullName, ".msixupload")
+          Copy-Item -Path $upload.FullName -Destination $msixUpload -Force
+
+          Write-Host "Submitting package: $msixUpload"
+          msstore publish "$msixUpload" -id $appName --verbose
