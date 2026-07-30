@@ -1,5 +1,9 @@
 # HololensSatelliteViewer
 
+<a href="https://get.microsoft.com/installer/download/9nr3z5g9gbj7?referrer=appbadge" target="_self" >
+	<img src="https://get.microsoft.com/images/en-us%20dark.svg" width="200"/>
+</a>
+
 [![UWP Build](https://github.com/turbolego/HololensSatelliteViewer/actions/workflows/dotnet.yml/badge.svg)](https://github.com/turbolego/HololensSatelliteViewer/actions/workflows/dotnet.yml)
 [![UWP Package](https://github.com/turbolego/HololensSatelliteViewer/actions/workflows/dotnet-desktop.yml/badge.svg)](https://github.com/turbolego/HololensSatelliteViewer/actions/workflows/dotnet-desktop.yml)
 [![Store Submission](https://github.com/turbolego/HololensSatelliteViewer/actions/workflows/store-submission.yml/badge.svg)](https://github.com/turbolego/HololensSatelliteViewer/actions/workflows/store-submission.yml)
