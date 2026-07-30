@@ -45,7 +45,10 @@ namespace HololensSatelliteViewer
         private DeviceResources deviceResources;
 
         // Render loop timer.
-        private StepTimer timer = new StepTimer();
+        private readonly StepTimer timer = new StepTimer();
+
+        // Keep track of mouse input.
+        bool pointerPressed = false;
 
         // Represents the holographic space around the user.
         HolographicSpace holographicSpace;
@@ -70,9 +73,6 @@ namespace HololensSatelliteViewer
             }
         };
         List<GamepadWithButtonState> gamepads = new List<GamepadWithButtonState>();
-
-        // Keep track of mouse input.
-        bool pointerPressed = false;
 
         // Cache whether or not the HolographicCamera.Display property can be accessed.
         bool canGetHolographicDisplayForCamera = false;
