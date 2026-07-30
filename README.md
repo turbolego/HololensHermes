@@ -4,6 +4,8 @@
 	<img src="https://get.microsoft.com/images/en-us%20dark.svg" width="200"/>
 </a>
 
+[View Microsoft Store page](https://apps.microsoft.com/detail/9nr3z5g9gbj7?hl=en-GB&gl=NO)
+
 [![UWP Build](https://github.com/turbolego/HololensSatelliteViewer/actions/workflows/dotnet.yml/badge.svg)](https://github.com/turbolego/HololensSatelliteViewer/actions/workflows/dotnet.yml)
 [![UWP Package](https://github.com/turbolego/HololensSatelliteViewer/actions/workflows/dotnet-desktop.yml/badge.svg)](https://github.com/turbolego/HololensSatelliteViewer/actions/workflows/dotnet-desktop.yml)
 [![Store Submission](https://github.com/turbolego/HololensSatelliteViewer/actions/workflows/store-submission.yml/badge.svg)](https://github.com/turbolego/HololensSatelliteViewer/actions/workflows/store-submission.yml)
