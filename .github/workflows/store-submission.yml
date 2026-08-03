@@ -207,7 +207,7 @@ jobs:
         if: >
           (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'submit')
           || github.event_name == 'push'
-        uses: microsoft/microsoft-store-apppublisher@v1.1
+        uses: microsoft/microsoft-store-apppublisher@v1.4
 
       - name: Reconfigure store credentials
         if: >
