@@ -114,18 +114,8 @@ namespace HololensSatelliteViewer.Common
             // adapter the app can use.
             if (id != 0)
             {
-                // Create the DXGI factory.
-                using (var dxgiFactory4 = new SharpDX.DXGI.Factory4())
-                {
-                    // Retrieve the adapter specified by the holographic space.
-                    IntPtr adapterPtr;
-                    dxgiFactory4.EnumAdapterByLuid((long)id, InteropStatics.IDXGIAdapter3, out adapterPtr);
-
-                    if (adapterPtr != IntPtr.Zero)
-                    {
-                        dxgiAdapter = new SharpDX.DXGI.Adapter3(adapterPtr);
-                    }
-                }
+                this.RemoveAndDispose(ref dxgiAdapter);
+                dxgiAdapter = FindAdapterByLuidOrDefault((long)id);
             }
             else
             {
@@ -135,6 +125,49 @@ namespace HololensSatelliteViewer.Common
             CreateDeviceResources();
 
             holographicSpace.SetDirect3D11Device(d3dInteropDevice);
+        }
+
+        private SharpDX.DXGI.Adapter3 FindAdapterByLuidOrDefault(long luid)
+        {
+            using (var dxgiFactory2 = new SharpDX.DXGI.Factory2())
+            {
+                for (int i = 0; ; i++)
+                {
+                    SharpDX.DXGI.Adapter1 candidate = null;
+
+                    try
+                    {
+                        candidate = dxgiFactory2.GetAdapter1(i);
+                    }
+                    catch
+                    {
+                        break;
+                    }
+
+                    var description = candidate.Description1;
+                    if (description.Luid == luid)
+                    {
+                        using (candidate)
+                        {
+                            return this.ToDispose(candidate.QueryInterface<SharpDX.DXGI.Adapter3>());
+                        }
+                    }
+
+                    candidate.Dispose();
+                }
+
+                try
+                {
+                    using (var defaultAdapter = dxgiFactory2.GetAdapter1(0))
+                    {
+                        return this.ToDispose(defaultAdapter.QueryInterface<SharpDX.DXGI.Adapter3>());
+                    }
+                }
+                catch
+                {
+                    return null;
+                }
+            }
         }
 
 
