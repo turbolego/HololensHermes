@@ -136,7 +136,7 @@
   <Import Project="ms.fxcompile.targets" />
   <ItemGroup>
     <PackageReference Include="Microsoft.NETCore.UniversalWindowsPlatform">
-      <Version>5.2.4</Version>
+      <Version>5.4.7</Version>
     </PackageReference>
     <PackageReference Include="SharpDX">
       <Version>3.1.1</Version>
