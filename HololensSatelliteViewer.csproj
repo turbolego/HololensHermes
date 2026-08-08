@@ -84,6 +84,7 @@
     <Compile Include="Services\OrbitService.cs" />
     <Compile Include="Services\TleParser.cs" />
     <Compile Include="Services\SatelliteSelection.cs" />
+    <Compile Include="Services\CompassService.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
 

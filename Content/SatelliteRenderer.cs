@@ -7,6 +7,7 @@ using HololensSatelliteViewer.Common;
 using HololensSatelliteViewer.Models;
 using HololensSatelliteViewer.Services;
 using Windows.UI.Input.Spatial;
+using Windows.Devices.Sensors;
 
 namespace HololensSatelliteViewer.Content
 {
@@ -15,6 +16,7 @@ namespace HololensSatelliteViewer.Content
         private readonly DeviceResources deviceResources;
         private readonly OrbitService orbitService;
         private readonly GeolocationService geolocationService;
+        private readonly CompassService compassService;
 
         private SharpDX.Direct3D11.InputLayout inputLayout;
         private SharpDX.Direct3D11.Buffer vertexBuffer;
@@ -46,6 +48,12 @@ namespace HololensSatelliteViewer.Content
         private Vector3 worldCenter = Vector3.Zero;
         private bool worldCenterLocked;
         private float ceilingY;
+
+        /// <summary>
+        /// Latest compass heading in degrees (0=North, 90=East, 180=South, 270=West).
+        /// Updated on a background thread by CompassService; read on the render thread.
+        /// </summary>
+        private float compassHeadingDegrees;
 
         private string gpsDebug = "GPS: --";
 
@@ -88,6 +96,8 @@ namespace HololensSatelliteViewer.Content
             this.deviceResources = deviceResources;
             this.orbitService = new OrbitService();
             this.geolocationService = new GeolocationService();
+            this.compassService = new CompassService();
+            this.compassService.Initialize();
             CreateDeviceDependentResourcesAsync();
         }
 
@@ -161,6 +171,14 @@ namespace HololensSatelliteViewer.Content
 
         public Vector3 Position => worldCenter;
 
+        /// <summary>
+        /// Set by the main loop each frame from the compass service.
+        /// </summary>
+        public void SetCompassHeading(float degrees)
+        {
+            compassHeadingDegrees = degrees;
+        }
+
         private void RenderSatellites()
         {
             var context = deviceResources.D3DDeviceContext;
@@ -181,7 +199,7 @@ namespace HololensSatelliteViewer.Content
             foreach (var sat in satellites)
             {
                 var pos = ComputeSatellitePosition(sat);
-                DrawCubeAt(pos, SatCubeScale);
+                DrawCubeAt(pos, SatCubeScale, compassHeadingDegrees);
             }
         }
 
@@ -207,7 +225,7 @@ namespace HololensSatelliteViewer.Content
             foreach (var sat in satellites)
             {
                 var pos = ComputeSatellitePosition(sat) + new Vector3(0f, 0.08f, 0f);
-                DrawTextBillboard(ShortName(sat.Name), pos, SatelliteLabelSize);
+                DrawTextBillboard(ShortName(sat.Name), pos, SatelliteLabelSize, true, compassHeadingDegrees);
             }
 
             Vector3 panelCenter = worldCenter + new Vector3(0.0f, 0.15f, -1.15f);
@@ -249,7 +267,7 @@ namespace HololensSatelliteViewer.Content
             for (int i = 0; i < lines.Count && i < 11; i++)
             {
                 Vector3 p = new Vector3(panelCenter.X - 0.7f, startY - i * DebugLineSpacing, panelCenter.Z);
-                DrawTextBillboard(Sanitize(lines[i]), p, DebugTextSize, false);
+                DrawTextBillboard(Sanitize(lines[i]), p, DebugTextSize, false, compassHeadingDegrees);
             }
 
             context.PixelShader.SetShaderResource(0, null);
@@ -281,15 +299,26 @@ namespace HololensSatelliteViewer.Content
             return new Vector3(worldCenter.X + x, y, worldCenter.Z + z);
         }
 
-        private void DrawCubeAt(Vector3 worldPos, float scale)
+        private void DrawCubeAt(Vector3 worldPos, float scale, float compassHeadingDegrees)
         {
-            Matrix4x4 m = Matrix4x4.CreateScale(scale) * Matrix4x4.CreateTranslation(worldPos);
+            // Rotate the world position around Y axis by compass heading so the
+            // satellite dome tracks the user's physical orientation.
+            // When compassHeadingDegrees=0 (facing North), no rotation — the dome
+            // is in "world" orientation. When heading=90 (facing East), the dome
+            // shifts so that what was "North" in the dome now appears to the user's
+            // right, matching real-world alignment.
+            float headingRad = (float)(compassHeadingDegrees * Math.PI / 180.0);
+            Matrix4x4 compassRot = Matrix4x4.CreateRotationY(headingRad);
+
+            // Apply compass rotation to the world position, then build the model matrix
+            Vector3 rotatedPos = Vector3.Transform(worldPos, compassRot);
+            Matrix4x4 m = Matrix4x4.CreateScale(scale) * Matrix4x4.CreateTranslation(rotatedPos);
             modelConstantBufferData.model = Matrix4x4.Transpose(m);
             deviceResources.D3DDeviceContext.UpdateSubresource(ref modelConstantBufferData, modelConstantBuffer);
             deviceResources.D3DDeviceContext.DrawIndexedInstanced(indexCount, 2, 0, 0, 0);
         }
 
-        private void DrawTextBillboard(string text, Vector3 origin, float size, bool faceCamera = true)
+        private void DrawTextBillboard(string text, Vector3 origin, float size, bool faceCamera, float compassHeadingDegrees)
         {
             if (string.IsNullOrWhiteSpace(text))
             {
@@ -306,9 +335,15 @@ namespace HololensSatelliteViewer.Content
                 UpdateTextQuadVertices(uv);
 
                 Vector3 glyphPos = origin + new Vector3(start + i * advance, 0, 0);
+
+                // Rotate the glyph position by compass heading so labels track the dome
+                float headingRad = (float)(compassHeadingDegrees * Math.PI / 180.0);
+                Matrix4x4 compassRot = Matrix4x4.CreateRotationY(headingRad);
+                Vector3 rotatedPos = Vector3.Transform(glyphPos, compassRot);
+
                 Matrix4x4 m = faceCamera
-                    ? BuildBillboard(glyphPos, size * 0.55f, size * 0.85f)
-                    : Matrix4x4.CreateScale(size * 0.55f, size * 0.85f, 1.0f) * Matrix4x4.CreateTranslation(glyphPos);
+                    ? BuildBillboard(rotatedPos, size * 0.55f, size * 0.85f)
+                    : Matrix4x4.CreateScale(size * 0.55f, size * 0.85f, 1.0f) * Matrix4x4.CreateTranslation(rotatedPos);
 
                 modelConstantBufferData.model = Matrix4x4.Transpose(m);
                 deviceResources.D3DDeviceContext.UpdateSubresource(ref modelConstantBufferData, modelConstantBuffer);
