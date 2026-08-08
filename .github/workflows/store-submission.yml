@@ -13,6 +13,11 @@
 #   5. The app must already exist in Partner Center with at least one
 #      submission (even a draft with the correct package info).
 #
+# NOTE: The Store rejects re-submissions of the SAME package version with
+# different content ('packages must be uniquely identified by their full
+# names'). Bump <Identity Version> in Package.appxmanifest before each
+# re-submit.
+#
 # See: https://learn.microsoft.com/windows/apps/publish/msstore-dev-cli/github-actions
 #
 # WARNING: App update operations currently support free products only.
@@ -107,19 +112,16 @@ jobs:
             -FilePath "${{ github.workspace }}\HololensSatelliteViewer_TemporaryKey.pfx" `
             -Password $pwd
 
-      - name: Auto-increment package version for this run
+      # ── Version for this submission ─────────────────────────────────
+      # The version comes from Package.appxmanifest (the repo is the single
+      # source of truth). The Store rejects re-submissions of the SAME
+      # version with different content, so bump <Identity Version> in
+      # Package.appxmanifest before each re-submit (see header note).
+      - name: Report package version for this run
         shell: pwsh
         run: |
-          $manifestPath = "${{ github.workspace }}\Package.appxmanifest"
-          $manifest = [xml](Get-Content $manifestPath)
-          $current = [Version]$manifest.Package.Identity.Version
-
-          # Microsoft Store requires the 4th segment (revision) to be 0.
-          $next = "{0}.{1}.{2}.0" -f $current.Major, $current.Minor, ($current.Build + 1)
-          $manifest.Package.Identity.Version = $next
-          $manifest.Save($manifestPath)
-
-          Write-Host "Bumped package version: $($current.ToString()) -> $next"
+          $manifest = [xml](Get-Content "${{ github.workspace }}\Package.appxmanifest")
+          Write-Host "Submitting package version: $($manifest.Package.Identity.Version)"
 
       - name: Validate manifest version for Store
         shell: pwsh
