@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>HololensSatelliteViewer.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="xunit" Version="2.6.6" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.6" />
+  </ItemGroup>
+
+  <!-- Link the ACTUAL production source files so tests exercise real app code.
+       Only pure C# files are linked (no UWP/SharpDX/Windows.* dependencies). -->
+  <ItemGroup>
+    <Compile Include="../../Services/TleParser.cs" Link="Services/TleParser.cs" />
+    <Compile Include="../../Services/SatelliteSelection.cs" Link="Services/SatelliteSelection.cs" />
+    <Compile Include="../../Services/Sgp4Service.cs" Link="Services/Sgp4Service.cs" />
+    <Compile Include="../../Models/Satellite.cs" Link="Models/Satellite.cs" />
+    <Compile Include="../../Models/TleRecord.cs" Link="Models/TleRecord.cs" />
+  </ItemGroup>
+
+</Project>

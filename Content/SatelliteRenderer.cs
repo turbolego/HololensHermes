@@ -125,10 +125,14 @@ namespace HololensSatelliteViewer.Content
                     }
 
                     var live = await orbitService.GetLiveSatellitesAsync();
-                    var closest = live
-                        .OrderBy(s => s.RangeKm)
-                        .Take(MaxSatellitesRendered)
-                        .ToList();
+                    // Rank by elevation (best-visible first), NOT by range:
+                    // range-ranking would always drop geostationary satellites
+                    // (GOES etc., ~35,000+ km away) in favor of nearby LEO
+                    // objects, even when the GEO bird is high in the sky.
+                    // Elevation drives the dome position; range is irrelevant
+                    // to rendering here.
+                    var closest = SatelliteSelection.BestVisible(
+                        live, MaxSatellitesRendered);
 
                     satellites = closest;
 

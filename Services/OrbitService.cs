@@ -22,10 +22,14 @@ namespace HololensSatelliteViewer.Services
 
         // ── CelesTrak GP API Endpoints ─────────────────────────────────────
         // We use FORMAT=tle to maintain compatibility with the existing parser.
+        // Groups are MERGED (not first-success) so both LEO/near-Earth and
+        // geostationary (GOES etc.) satellites are available; GOES-class birds
+        // live in the "geo" group, which the old code never fetched.
         private static readonly string[] TleUrls = new[]
         {
             "https://celestrak.org/NORAD/elements/gp.php?GROUP=visual&FORMAT=tle",
             "https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle",
+            "https://celestrak.org/NORAD/elements/gp.php?GROUP=geo&FORMAT=tle",
         };
 
         private List<TleRecord> _tleRecords = new List<TleRecord>();
@@ -180,27 +184,44 @@ GRACE-FO 2
                 && age.TotalSeconds < 60.0)
                 return;
 
+            // Collect live records across ALL group URLs (visual + stations +
+            // geo). Dedupe within the live set; once ANY live data arrives it
+            // REPLACES the hardcoded fallback TLEs entirely (fallback entries
+            // are stale — keeping them would freeze old orbits forever).
+            var liveRecords = new List<TleRecord>();
             foreach (var url in TleUrls)
             {
                 try
                 {
                     var text    = await _http.GetStringAsync(url);
-                    var records = ParseTleText(text);
-                    if (records.Count > 0)
+                    var records = TleParser.Parse(text);
+                    foreach (var rec in records)
                     {
-                        _tleRecords    = records;
-                        TleCount       = records.Count;
-                        _lastTleUpdate = DateTime.UtcNow;
-                        _usingFallback = false;
-                        LastError      = string.Empty;
-                        return;
+                        if (!liveRecords.Any(r => r.NoradId == rec.NoradId))
+                            liveRecords.Add(rec);
                     }
+                    _lastTleUpdate = DateTime.UtcNow;
+                    _usingFallback = false;
+                    LastError      = string.Empty;
+                    // Continue to next URL: we want ALL groups merged.
                 }
                 catch (Exception ex)
                 {
-                    LastError = "API:" + Truncate(ex.Message, 20);
+                    if (LastError == string.Empty)
+                        LastError = "API:" + Truncate(ex.Message, 20);
                 }
             }
+
+            if (liveRecords.Count > 0)
+            {
+                _tleRecords = liveRecords;
+            }
+
+            TleCount = _tleRecords.Count;
+
+            // If nothing was fetched, keep whatever we have (fallback or previous)
+            if (_tleRecords.Count > 0)
+                return;
 
             _lastTleUpdate = DateTime.UtcNow;   // reset timer so we retry in 60 s
             TleCount       = _tleRecords.Count;
@@ -209,73 +230,10 @@ GRACE-FO 2
         /// <summary>
         /// Parses a standard 3-line TLE text block (name / line1 / line2).
         /// Also handles 2-line format (line1 / line2, no name).
+        /// Delegates to the pure TleParser so the logic is unit-testable.
         /// </summary>
         private static List<TleRecord> ParseTleText(string text)
-        {
-            var records = new List<TleRecord>();
-            var lines   = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-
-            int i = 0;
-            while (i < lines.Length)
-            {
-                var l = lines[i].Trim();
-
-                if (string.IsNullOrWhiteSpace(l) || l.StartsWith("#"))
-                {
-                    i++; continue;
-                }
-
-                // 3-line format: name line → line1 → line2
-                if (!l.StartsWith("1 ") && !l.StartsWith("2 ")
-                    && i + 2 < lines.Length)
-                {
-                    var l1 = lines[i + 1].Trim();
-                    var l2 = lines[i + 2].Trim();
-                    if (l1.StartsWith("1 ") && l1.Length >= 69
-                     && l2.StartsWith("2 ") && l2.Length >= 69)
-                    {
-                        var rec = TryParse(l, l1, l2);
-                        if (rec != null) records.Add(rec);
-                        i += 3; continue;
-                    }
-                }
-
-                // 2-line format: line1 → line2
-                if (l.StartsWith("1 ") && l.Length >= 69 && i + 1 < lines.Length)
-                {
-                    var l2 = lines[i + 1].Trim();
-                    if (l2.StartsWith("2 ") && l2.Length >= 69)
-                    {
-                        var rec = TryParse("UNKNOWN", l, l2);
-                        if (rec != null) records.Add(rec);
-                        i += 2; continue;
-                    }
-                }
-
-                i++;
-            }
-
-            return records;
-        }
-
-        private static TleRecord TryParse(string name, string line1, string line2)
-        {
-            try
-            {
-                int.TryParse(line1.Substring(2, 5).Trim(),
-                    System.Globalization.NumberStyles.Integer,
-                    System.Globalization.CultureInfo.InvariantCulture,
-                    out int norad);
-                return new TleRecord
-                {
-                    Name    = name.Trim(),
-                    NoradId = norad,
-                    Line1   = line1,
-                    Line2   = line2
-                };
-            }
-            catch { return null; }
-        }
+            => TleParser.Parse(text);
 
         private static string ShortName(string name)
         {
