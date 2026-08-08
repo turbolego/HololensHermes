@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <RootNamespace>VerifySatellites</RootNamespace>
+  </PropertyGroup>
+
+  <!-- Link the ACTUAL production source files so this verifies real app code. -->
+  <ItemGroup>
+    <Compile Include="../../Services/OrbitService.cs" Link="OrbitService.cs" />
+    <Compile Include="../../Services/Sgp4Service.cs" Link="Sgp4Service.cs" />
+    <Compile Include="../../Services/TleParser.cs" Link="TleParser.cs" />
+    <Compile Include="../../Services/SatelliteSelection.cs" Link="SatelliteSelection.cs" />
+    <Compile Include="../../Models/Satellite.cs" Link="Satellite.cs" />
+    <Compile Include="../../Models/TleRecord.cs" Link="TleRecord.cs" />
+  </ItemGroup>
+
+</Project>
