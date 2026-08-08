@@ -12,7 +12,7 @@ plus a GOES visibility probe for geostationary satellites.
 ## Usage
 
 ```bash
-dotnet run                      # default: Kristiansand, Norway (58.4005028, 8.7068188)
+dotnet run                      # default: Lommedalen, Norway (59.9639707, 10.4698709)
 dotnet run -- <lat> <lon>       # any observer GPS fix
 ```
 

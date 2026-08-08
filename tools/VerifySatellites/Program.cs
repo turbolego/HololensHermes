@@ -18,14 +18,14 @@ namespace VerifySatellites
     ///     load — GROUP=geo was missing from the TLE sources).
     ///
     /// Usage:
-    ///   dotnet run                          (Kristiansand 58.4005028, 8.7068188)
+    ///   dotnet run                          (Lommedalen 59.9639707, 10.4698709)
     ///   dotnet run -- &lt;lat&gt; &lt;lon&gt;            (any observer GPS fix)
     /// </summary>
     internal static class Program
     {
-        // Kristiansand, Norway — default observer GPS fix
-        private const double DefaultLat = 58.4005028;
-        private const double DefaultLon = 8.7068188;
+        // Lommedalen, Norway (near Oslo) — default observer GPS fix
+        private const double DefaultLat = 59.9639707;
+        private const double DefaultLon = 10.4698709;
 
         private static async Task<int> Main(string[] args)
         {
