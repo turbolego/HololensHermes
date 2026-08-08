@@ -13,10 +13,10 @@
 #   5. The app must already exist in Partner Center with at least one
 #      submission (even a draft with the correct package info).
 #
-# NOTE: The Store rejects re-submissions of the SAME package version with
-# different content ('packages must be uniquely identified by their full
-# names'). Bump <Identity Version> in Package.appxmanifest before each
-# re-submit.
+# NOTE: Each 'submit' run auto-increments <Identity Version> in
+# Package.appxmanifest (4th segment stays 0, as the Store requires), commits
+# the bump back to the repo after a successful submission, and creates a
+# GitHub release tagged v<version> with the package attached.
 #
 # See: https://learn.microsoft.com/windows/apps/publish/msstore-dev-cli/github-actions
 #
@@ -36,25 +36,20 @@ on:
         type: choice
         options:
           - package-only   # Build + validate, upload artifact only
-          - submit         # Build + validate + publish to Store
-
-  # Or trigger automatically when a release tag is pushed (e.g. v1.0.1)
-  push:
-    tags:
-      - 'v*.*.*'
+          - submit         # Build + validate + publish to Store + create GitHub release
 
 jobs:
   store-package:
     runs-on: windows-2022
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
       - name: Validate Store submission secrets
-        if: >
-          (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'submit')
-          || github.event_name == 'push'
+        if: github.event.inputs.action == 'submit'
         shell: pwsh
         env:
           TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
@@ -112,16 +107,23 @@ jobs:
             -FilePath "${{ github.workspace }}\HololensSatelliteViewer_TemporaryKey.pfx" `
             -Password $pwd
 
-      # ── Version for this submission ─────────────────────────────────
-      # The version comes from Package.appxmanifest (the repo is the single
-      # source of truth). The Store rejects re-submissions of the SAME
-      # version with different content, so bump <Identity Version> in
-      # Package.appxmanifest before each re-submit (see header note).
-      - name: Report package version for this run
+      # ── Auto-increment package version (submit runs only) ───────────
+      # Microsoft Store requires the 4th segment (revision) to be 0.
+      # The bump is applied to the working tree BEFORE the build so the
+      # package carries the new version; it is committed back to the repo
+      # after a successful Store submission (see 'Commit version bump').
+      - name: Auto-increment package version
+        if: github.event.inputs.action == 'submit'
         shell: pwsh
         run: |
-          $manifest = [xml](Get-Content "${{ github.workspace }}\Package.appxmanifest")
-          Write-Host "Submitting package version: $($manifest.Package.Identity.Version)"
+          $manifestPath = "${{ github.workspace }}\Package.appxmanifest"
+          $manifest = [xml](Get-Content $manifestPath)
+          $current = [Version]$manifest.Package.Identity.Version
+          $next = "{0}.{1}.{2}.0" -f $current.Major, $current.Minor, ($current.Build + 1)
+          $manifest.Package.Identity.Version = $next
+          $manifest.Save($manifestPath)
+          "NEXT_VERSION=$next" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "Bumped package version: $($current.ToString()) -> $next"
 
       - name: Validate manifest version for Store
         shell: pwsh
@@ -204,17 +206,13 @@ jobs:
             AppPackages/**/Add-AppDevPackage.ps1
           if-no-files-found: warn
 
-      # ── Store submission (only on explicit 'submit' or tag push) ─────
+      # ── Store submission (only on explicit 'submit') ─────────────────
       - name: Configure Microsoft Store CLI
-        if: >
-          (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'submit')
-          || github.event_name == 'push'
+        if: github.event.inputs.action == 'submit'
         uses: microsoft/microsoft-store-apppublisher@v1.4
 
       - name: Reconfigure store credentials
-        if: >
-          (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'submit')
-          || github.event_name == 'push'
+        if: github.event.inputs.action == 'submit'
         shell: pwsh
         env:
           TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
@@ -229,9 +227,7 @@ jobs:
             --clientSecret "$env:CLIENT_SECRET"
 
       - name: Publish app package to Microsoft Store
-        if: >
-          (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'submit')
-          || github.event_name == 'push'
+        if: github.event.inputs.action == 'submit'
         shell: pwsh
         env:
           STORE_APP_ID: ${{ secrets.STORE_APP_ID }}
@@ -257,3 +253,38 @@ jobs:
 
           Write-Host "Using explicit Store AppId from STORE_APP_ID secret."
           msstore publish "$msixUpload" --appId "$env:STORE_APP_ID" --verbose
+
+      # ── Persist the version bump (only after a successful submit) ────
+      # Commit Package.appxmanifest back to master so the repo always matches
+      # the last Store-submitted version and the next run increments above it.
+      - name: Commit version bump
+        if: github.event.inputs.action == 'submit'
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Package.appxmanifest
+          git commit -m "chore: bump version to $env:NEXT_VERSION for Store submission [skip ci]" -q
+          git push origin HEAD:${{ github.ref_name }}
+          Write-Host "Committed and pushed Package.appxmanifest (v$env:NEXT_VERSION)"
+
+      # ── Create GitHub release (only after a successful submit) ───────
+      - name: Create GitHub release
+        if: github.event.inputs.action == 'submit'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "v$env:NEXT_VERSION"
+          $pkg = Get-ChildItem -Path "${{ github.workspace }}\AppPackages" `
+            -Recurse -Filter "*.appxupload" |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+          Write-Host "Creating release $tag with package: $($pkg.Name)"
+          $bumpSha = git rev-parse HEAD
+          gh release create $tag `
+            --title "HololensSatelliteViewer $tag" `
+            --notes "Store submission of version $env:NEXT_VERSION." `
+            --target $bumpSha `
+            "$($pkg.FullName)"
+          Write-Host "Release $tag created: https://github.com/turbolego/HololensSatelliteViewer/releases/tag/$tag"
