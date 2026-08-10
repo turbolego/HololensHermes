@@ -301,17 +301,14 @@ namespace HololensSatelliteViewer.Content
 
         private void DrawCubeAt(Vector3 worldPos, float scale, float compassHeadingDegrees)
         {
-            // Rotate the world position around Y axis by compass heading so the
-            // satellite dome tracks the user's physical orientation.
-            // When compassHeadingDegrees=0 (facing North), no rotation — the dome
-            // is in "world" orientation. When heading=90 (facing East), the dome
-            // shifts so that what was "North" in the dome now appears to the user's
-            // right, matching real-world alignment.
-            float headingRad = (float)(compassHeadingDegrees * Math.PI / 180.0);
+            // Rotate around the locked dome center (not global origin), and use
+            // negative heading so world-space north remains physically stable.
+            float headingRad = (float)(-compassHeadingDegrees * Math.PI / 180.0);
             Matrix4x4 compassRot = Matrix4x4.CreateRotationY(headingRad);
 
-            // Apply compass rotation to the world position, then build the model matrix
-            Vector3 rotatedPos = Vector3.Transform(worldPos, compassRot);
+            // Apply compass rotation around the locked dome center, then build the model matrix
+            Vector3 local = worldPos - worldCenter;
+            Vector3 rotatedPos = Vector3.Transform(local, compassRot) + worldCenter;
             Matrix4x4 m = Matrix4x4.CreateScale(scale) * Matrix4x4.CreateTranslation(rotatedPos);
             modelConstantBufferData.model = Matrix4x4.Transpose(m);
             deviceResources.D3DDeviceContext.UpdateSubresource(ref modelConstantBufferData, modelConstantBuffer);
@@ -336,10 +333,12 @@ namespace HololensSatelliteViewer.Content
 
                 Vector3 glyphPos = origin + new Vector3(start + i * advance, 0, 0);
 
-                // Rotate the glyph position by compass heading so labels track the dome
-                float headingRad = (float)(compassHeadingDegrees * Math.PI / 180.0);
+                // Rotate around the locked dome center with the same heading convention
+                // as markers so text and cubes stay aligned.
+                float headingRad = (float)(-compassHeadingDegrees * Math.PI / 180.0);
                 Matrix4x4 compassRot = Matrix4x4.CreateRotationY(headingRad);
-                Vector3 rotatedPos = Vector3.Transform(glyphPos, compassRot);
+                Vector3 local = glyphPos - worldCenter;
+                Vector3 rotatedPos = Vector3.Transform(local, compassRot) + worldCenter;
 
                 Matrix4x4 m = faceCamera
                     ? BuildBillboard(rotatedPos, size * 0.55f, size * 0.85f)
