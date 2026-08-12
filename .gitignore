@@ -242,6 +242,7 @@ ClientBin/
 # re-creatable from scripts/create_cert.ps1.  Committing it makes the
 # project clone-and-build with zero manual steps.
 !HololensSatelliteViewer_TemporaryKey.pfx
+!HololensHermes_TemporaryKey.pfx
 *.publishsettings
 orleans.codegen.cs
 
