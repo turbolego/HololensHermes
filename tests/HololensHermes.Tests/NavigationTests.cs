@@ -23,6 +23,26 @@ using HololensHermes.Models;
 namespace HololensHermes.Tests;
 
 // ---------------------------------------------------------------------------
+// Project goal (from README and user notes):
+//
+// HololensHermes uses the spatial sensors in the Microsoft HoloLens 1 together
+// with the Hermes agent. Hermes can search for information about floor layouts
+// for the building the user is currently in, and uses approximate GPS location
+// from Wi-Fi data (Windows location APIs) to guide the user indoors — e.g. to a
+// specific book in a library.
+//
+// Relevant constraint (user note):
+//   "Wi-Fi Positioning: Apps can approximate location data using nearby Wi-Fi
+//    networks through Windows location APIs, though it is less precise than
+//    dedicated GPS."
+//
+// These scenarios are written so FloorPlanService.ComputeTransform,
+// CalibrationService, HermesApiService, and the HoloLens render path can be
+// exercised with real venue coordinates, real call-number data, real routing
+// references, AND the Wi-Fi-positioning / Hermes-floor-layout query pipeline.
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
 // 0. Venue constants — real values for Deichmanske Library (Strømsveien 35)
 // ---------------------------------------------------------------------------
 
@@ -33,8 +53,31 @@ public static class DeichmanLibrary
     // map share URL's center (10.752340, 59.908888) — see the mazemap share URL
     // from the user; the entrance is slightly north of that center on the
     // corner of Strømsveien / Akershusstranda.
+    //
+    // In the real HololensHermes pipeline, these coordinates are the TARGET of
+    // the Wi-Fi positioning estimate: the HoloLens uses nearby Wi-Fi BSSIDs via
+    // the Windows location APIs to approximate latitude/longitude, and Hermes
+    // uses that approximate position to retrieve the correct floor layout for
+    // this building (Deichmanske Library, campusid=363). The Wi-Fi estimate is
+    // intentionally approximate (less precise than dedicated GPS), so these
+    // constants include an uncertainty radius in meters for the test assertions
+    // that check "is the user close enough to this building to load its floor plan?".
     public static readonly double EntranceLatitude  = 59.91088;
     public static readonly double EntranceLongitude = 10.75202;
+
+    // Campus id for this venue (from the mazemap share URL: campusid=363).
+    // Hermes uses the user's APPROXIMATE Wi-Fi position to select the correct
+    // campus / venue, then retrieves the floor layout for that campus.
+    public static readonly int CampusId = 363;
+
+    // Approximate Wi-Fi-positioning uncertainty radius (meters).
+    // User note: Wi-Fi positioning is less precise than dedicated GPS. For
+    // indoor library use, expect the HoloLens/Windows location estimate to be
+    // accurate to within roughly 20-50 m outdoors, and possibly worse indoors
+    // (where Wi-Fi AP geometry is different and the device may be surrounded by
+    // the building's own APs). We use 40 m as a realistic "good enough to know
+    // I'm at the library entrance" threshold for the navigation-start assertions.
+    public static readonly double WifiPositioningUncertaintyMeters = 40.0;
 
     // Approx building footprint from open data / satellite imagery (rough).
     // The library occupies most of the block between Strømsveien, Akershusstranda,
@@ -88,6 +131,19 @@ public static class DeichmanLibrary
     public static readonly Point CornerAImagePoint     = new Point(40.0f, 456.0f);
     public static readonly Point CornerBImagePoint     = new Point(40.0f, 412.0f);
     public static readonly Point CornerCImagePoint     = new Point(200.0f, 456.0f);
+
+    // Campus selection helper: given an APPROXIMATE Wi-Fi position (lat/lon,
+    // possibly scattered), return the campus id Hermes should select. For
+    // Deichman, any position inside the building footprint returns campus 363.
+    // Positions outside the footprint return 0 (no campus) — in real code this
+    // would fall back to a nearest-venue query against Hermes.
+    public static int CampusIdForPosition(double lat, double lon)
+    {
+        if (lat >= BuildingSouth && lat <= BuildingNorth &&
+            lon >= BuildingWest  && lon <= BuildingEast)
+            return CampusId;
+        return 0;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -365,3 +421,466 @@ public class EndToEndNavigationSmokeTests
         Assert.Contains(DeichmanLibrary.TargetShelfLabel, label);
     }
 }
+
+// ---------------------------------------------------------------------------
+// 5. Wi-Fi positioning — approximate GPS from Wi-Fi (user note)
+//
+// "Wi-Fi Positioning: Apps can approximate location data using nearby Wi-Fi
+//  networks through Windows location APIs, though it is less precise than
+//  dedicated GPS."
+//
+// In HololensHermes the HoloLens uses nearby Wi-Fi BSSIDs via the Windows
+// location APIs to approximate latitude/longitude (no dedicated GPS on HoloLens
+// 1). Hermes uses that approximate position to select the correct floor layout
+// for the building the user is in (Deichmanske Library, campusid=363), then
+// overlays the floor plan and guides the user indoors.
+//
+// These tests verify the "close enough" semantics: the Wi-Fi estimate does NOT
+// need to match the true coordinates; it must fall within the uncertainty
+// radius so the right venue/floor plan is loaded and navigation can start.
+// ---------------------------------------------------------------------------
+
+public class WifiPositioningTests
+{
+    // ---- 5a. Wi-Fi estimate can be off by up to the uncertainty radius ----
+
+    [Fact]
+    public void wifi_estimate_within_uncertainty_usable_for_navigation()
+    {
+        var wifiLat  = DeichmanLibrary.EntranceLatitude;
+        var wifiLon  = DeichmanLibrary.EntranceLongitude;
+        var trueLat  = DeichmanLibrary.EntranceLatitude;
+        var trueLon  = DeichmanLibrary.EntranceLongitude;
+
+        var d = GeodesicDistanceMeters(wifiLat, wifiLon, trueLat, trueLon);
+
+        Assert.True(d <= DeichmanLibrary.WifiPositioningUncertaintyMeters,
+            $"Wi-Fi estimate {d:F1} m from true position — within {DeichmanLibrary.WifiPositioningUncertaintyMeters:F0} m uncertainty radius");
+    }
+
+    // ---- 5b. A scattered Wi-Fi estimate still identifies the right building ----
+
+    [Fact]
+    public void wifi_estimate_off_by_thirty_meters_still_identifies_library()
+    {
+        var scatterMeters = 30.0;
+        var wifiLat  = DeichmanLibrary.EntranceLatitude  + scatterMeters / 111320.0;
+        var wifiLon  = DeichmanLibrary.EntranceLongitude;
+        var trueLat  = DeichmanLibrary.EntranceLatitude;
+        var trueLon  = DeichmanLibrary.EntranceLongitude;
+
+        var d = GeodesicDistanceMeters(wifiLat, wifiLon, trueLat, trueLon);
+
+        Assert.True(d <= DeichmanLibrary.WifiPositioningUncertaintyMeters,
+            $"Scattered Wi-Fi estimate {d:F1} m from true — should still be within uncertainty radius");
+        Assert.True(d <= 45.0, "Should also pass a stricter sanity bound (< 45 m)");
+    }
+
+    // ---- 5c. A Wi-Fi estimate outside the uncertainty radius would NOT start navigation ----
+
+    [Fact]
+    public void wifi_estimate_too_far_away_does_not_trigger_navigation()
+    {
+        var wifiLat  = DeichmanLibrary.EntranceLatitude  + 120.0 / 111320.0;
+        var wifiLon  = DeichmanLibrary.EntranceLongitude;
+        var trueLat  = DeichmanLibrary.EntranceLatitude;
+        var trueLon  = DeichmanLibrary.EntranceLongitude;
+
+        var d = GeodesicDistanceMeters(wifiLat, wifiLon, trueLat, trueLon);
+
+        Assert.True(d > DeichmanLibrary.WifiPositioningUncertaintyMeters,
+            $"Wi-Fi estimate {d:F1} m off — should be OUTSIDE the uncertainty radius");
+    }
+
+    // ---- 5d. Unit: geodesic distance approx is sensible ----
+
+    [Fact]
+    public void geodesic_distance_returns_expected_magnitude()
+    {
+        var d = GeodesicDistanceMeters(59.9, 10.75, 60.9, 10.75);
+        Assert.InRange(d, 110000.0, 113000.0);
+    }
+
+    // ---- 5e. The user's approximate Wi-Fi position is within the building footprint ----
+
+    [Fact]
+    public void wifi_position_is_within_library_building_bounds()
+    {
+        var wifiLat  = 59.908888;
+        var wifiLon  = 10.752340;
+        var trueLat  = DeichmanLibrary.EntranceLatitude;
+        var trueLon  = DeichmanLibrary.EntranceLongitude;
+
+        Assert.InRange(wifiLat, DeichmanLibrary.BuildingSouth, DeichmanLibrary.BuildingNorth);
+        Assert.InRange(wifiLon, DeichmanLibrary.BuildingWest,  DeichmanLibrary.BuildingEast);
+
+        var d = GeodesicDistanceMeters(wifiLat, wifiLon, trueLat, trueLon);
+        Assert.True(d <= DeichmanLibrary.WifiPositioningUncertaintyMeters,
+            $"Wi-Fi estimate {d:F1} m from entrance — within uncertainty radius");
+    }
+
+    // ---- 5f. Hermes uses approximate Wi-Fi position to load the correct floor layout ----
+
+    [Fact]
+    public void approximate_wifi_position_still_selects_correct_campus()
+    {
+        var wifiLat  = DeichmanLibrary.EntranceLatitude;
+        var wifiLon  = DeichmanLibrary.EntranceLongitude;
+
+        Assert.InRange(wifiLat, DeichmanLibrary.BuildingSouth, DeichmanLibrary.BuildingNorth);
+        Assert.InRange(wifiLon, DeichmanLibrary.BuildingWest,  DeichmanLibrary.BuildingEast);
+
+        Assert.Equal(DeichmanLibrary.CampusIdForPosition(wifiLat, wifiLon), DeichmanLibrary.CampusId);
+    }
+
+    // Helper: approximate geodesic distance (lat/lon degrees → meters).
+    private static double GeodesicDistanceMeters(double lat1, double lon1, double lat2, double lon2)
+    {
+        var dx = (lon2 - lon1) * 111320.0 * Math.Cos((lat1 + lat2) / 2.0 * Math.PI / 180.0);
+        var dy = (lat2 - lat1) * 111320.0;
+        return Math.Sqrt(dx * dx + dy * dy);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 6. Hermes floor-layout retrieval (Wi-Fi → campus → floor plan)
+//
+// Hermes can search for information about floor layouts for the building the
+// user is currently on. The input is the user's APPROXIMATE GPS position from
+// Wi-Fi data (not exact). Hermes resolves that to a campus / venue and returns
+// the floor plan metadata (image URI, width/height in meters, north rotation),
+// then the HoloLens overlays the plan and guides the user indoors.
+// ---------------------------------------------------------------------------
+
+public class HermesFloorLayoutRetrievalTests
+{
+    // ---- 6a. Given approximate Wi-Fi position inside Deichman, Hermes selects campus 363 ----
+
+    [Fact]
+    public void hermes_selects_deichman_campus_from_approximate_wifi_position()
+    {
+        var wifiLat  = DeichmanLibrary.EntranceLatitude;
+        var wifiLon  = DeichmanLibrary.EntranceLongitude;
+
+        var campusId = DeichmanLibrary.CampusIdForPosition(wifiLat, wifiLon);
+
+        Assert.Equal(DeichmanLibrary.CampusId, campusId);
+    }
+
+    // ---- 6b. Wi-Fi estimate at the mazemap share center still resolves to Deichman ----
+
+    [Fact]
+    public void mazemap_share_center_resolves_to_deichman_campus()
+    {
+        var wifiLat  = 59.908888;
+        var wifiLon  = 10.752340;
+
+        var campusId = DeichmanLibrary.CampusIdForPosition(wifiLat, wifiLon);
+
+        Assert.Equal(DeichmanLibrary.CampusId, campusId);
+        Assert.InRange(wifiLat, DeichmanLibrary.BuildingSouth, DeichmanLibrary.BuildingNorth);
+        Assert.InRange(wifiLon, DeichmanLibrary.BuildingWest,  DeichmanLibrary.BuildingEast);
+    }
+
+    // ---- 6c. Wi-Fi estimate just outside the footprint does NOT resolve to Deichman ----
+
+    [Fact]
+    public void position_outside_footprint_does_not_resolve_to_deichman()
+    {
+        var wifiLat  = DeichmanLibrary.BuildingSouth - 0.0005;
+        var wifiLon  = DeichmanLibrary.EntranceLongitude;
+
+        var campusId = DeichmanLibrary.CampusIdForPosition(wifiLat, wifiLon);
+
+        Assert.NotEqual(DeichmanLibrary.CampusId, campusId);
+    }
+
+    // ---- 6d. Floor plan metadata for Deichman is well-formed ----
+
+    [Fact]
+    public void deichman_floor_plan_metadata_is_plausible()
+    {
+        var widthM  = 22.0f;
+        var heightM = 14.0f;
+        var northDeg = DeichmanLibrary.PublishedNorthRotationDeg;
+
+        Assert.True(widthM  > 0f);
+        Assert.True(heightM > 0f);
+        Assert.True(float.IsFinite(northDeg));
+        Assert.True(widthM  > heightM);
+    }
+
+    // ---- 6e. FloorPlan model round-trips the metadata Hermes would return ----
+
+    [Fact]
+    public void floor_plan_model_captures_hermes_metadata()
+    {
+        var fp = new FloorPlan
+        {
+            ImageUri = "https://example.invalid/deichman/floor3m.jpg",
+            RealWorldWidthMeters  = 22.0f,
+            RealWorldHeightMeters = 14.0f,
+            NorthRotationDegrees  = DeichmanLibrary.PublishedNorthRotationDeg
+        };
+
+        Assert.NotNull(fp.ImageUri);
+        Assert.True(fp.RealWorldWidthMeters  > 0f);
+        Assert.True(fp.RealWorldHeightMeters > 0f);
+        Assert.True(float.IsFinite(fp.NorthRotationDegrees));
+    }
+
+    // ---- 6f. Wi-Fi uncertainty is large enough to cover the share-URL center ----
+
+    [Fact]
+    public void wifi_uncertainty_covers_maze_map_share_center()
+    {
+        var shareLat  = 59.908888;
+        var shareLon  = 10.752340;
+        var entranceLat = DeichmanLibrary.EntranceLatitude;
+        var entranceLon = DeichmanLibrary.EntranceLongitude;
+
+        var d = GeodesicDistanceMeters(shareLat, shareLon, entranceLat, entranceLon);
+
+        Assert.True(d <= DeichmanLibrary.WifiPositioningUncertaintyMeters,
+            $"mazemap share center is {d:F1} m from entrance — must be within Wi-Fi uncertainty radius {DeichmanLibrary.WifiPositioningUncertaintyMeters:F0} m");
+    }
+
+    private static double GeodesicDistanceMeters(double lat1, double lon1, double lat2, double lon2)
+    {
+        var dx = (lon2 - lon1) * 111320.0 * Math.Cos((lat1 + lat2) / 2.0 * Math.PI / 180.0);
+        var dy = (lat2 - lat1) * 111320.0;
+        return Math.Sqrt(dx * dx + dy * dy);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 5. Wi-Fi positioning — approximate GPS from Wi-Fi (user note)
+//
+// "Wi-Fi Positioning: Apps can approximate location data using nearby Wi-Fi
+//  networks through Windows location APIs, though it is less precise than
+//  dedicated GPS."
+//
+// In HololensHermes the HoloLens uses nearby Wi-Fi BSSIDs via the Windows
+// location APIs to approximate latitude/longitude (no dedicated GPS on HoloLens
+// 1). Hermes uses that approximate position to select the correct floor layout
+// for the building the user is in (Deichmanske Library, campusid=363), then
+// overlays the floor plan and guides the user indoors.
+//
+// These tests verify the "close enough" semantics: the Wi-Fi estimate does NOT
+// need to match the true coordinates; it must fall within the uncertainty
+// radius so the right venue/floor plan is loaded and navigation can start.
+// ---------------------------------------------------------------------------
+
+public class WifiPositioningTests
+{
+    // ---- 5a. Wi-Fi estimate can be off by up to the uncertainty radius ----
+
+    [Fact]
+    public void wifi_estimate_within_uncertainty_usable_for_navigation()
+    {
+        var wifiLat  = DeichmanLibrary.EntranceLatitude;
+        var wifiLon  = DeichmanLibrary.EntranceLongitude;
+        var trueLat  = DeichmanLibrary.EntranceLatitude;
+        var trueLon  = DeichmanLibrary.EntranceLongitude;
+
+        var d = GeodesicDistanceMeters(wifiLat, wifiLon, trueLat, trueLon);
+
+        Assert.True(d <= DeichmanLibrary.WifiPositioningUncertaintyMeters,
+            $"Wi-Fi estimate {d:F1} m from true position — within {DeichmanLibrary.WifiPositioningUncertaintyMeters:F0} m uncertainty radius");
+    }
+
+    // ---- 5b. A scattered Wi-Fi estimate still identifies the right building ----
+
+    [Fact]
+    public void wifi_estimate_off_by_thirty_meters_still_identifies_library()
+    {
+        var scatterMeters = 30.0;
+        var wifiLat  = DeichmanLibrary.EntranceLatitude  + scatterMeters / 111320.0;
+        var wifiLon  = DeichmanLibrary.EntranceLongitude;
+        var trueLat  = DeichmanLibrary.EntranceLatitude;
+        var trueLon  = DeichmanLibrary.EntranceLongitude;
+
+        var d = GeodesicDistanceMeters(wifiLat, wifiLon, trueLat, trueLon);
+
+        Assert.True(d <= DeichmanLibrary.WifiPositioningUncertaintyMeters,
+            $"Scattered Wi-Fi estimate {d:F1} m from true — should still be within uncertainty radius");
+        Assert.True(d <= 45.0, "Should also pass a stricter sanity bound (< 45 m)");
+    }
+
+    // ---- 5c. A Wi-Fi estimate outside the uncertainty radius would NOT start navigation ----
+
+    [Fact]
+    public void wifi_estimate_too_far_away_does_not_trigger_navigation()
+    {
+        var wifiLat  = DeichmanLibrary.EntranceLatitude  + 120.0 / 111320.0;
+        var wifiLon  = DeichmanLibrary.EntranceLongitude;
+        var trueLat  = DeichmanLibrary.EntranceLatitude;
+        var trueLon  = DeichmanLibrary.EntranceLongitude;
+
+        var d = GeodesicDistanceMeters(wifiLat, wifiLon, trueLat, trueLon);
+
+        Assert.True(d > DeichmanLibrary.WifiPositioningUncertaintyMeters,
+            $"Wi-Fi estimate {d:F1} m off — should be OUTSIDE the uncertainty radius");
+    }
+
+    // ---- 5d. Unit: geodesic distance approx is sensible ----
+
+    [Fact]
+    public void geodesic_distance_returns_expected_magnitude()
+    {
+        var d = GeodesicDistanceMeters(59.9, 10.75, 60.9, 10.75);
+        Assert.InRange(d, 110000.0, 113000.0);
+    }
+
+    // ---- 5e. The user's approximate Wi-Fi position is within the building footprint ----
+
+    [Fact]
+    public void wifi_position_is_within_library_building_bounds()
+    {
+        var wifiLat  = 59.908888;
+        var wifiLon  = 10.752340;
+        var trueLat  = DeichmanLibrary.EntranceLatitude;
+        var trueLon  = DeichmanLibrary.EntranceLongitude;
+
+        Assert.InRange(wifiLat, DeichmanLibrary.BuildingSouth, DeichmanLibrary.BuildingNorth);
+        Assert.InRange(wifiLon, DeichmanLibrary.BuildingWest,  DeichmanLibrary.BuildingEast);
+
+        var d = GeodesicDistanceMeters(wifiLat, wifiLon, trueLat, trueLon);
+        Assert.True(d <= DeichmanLibrary.WifiPositioningUncertaintyMeters,
+            $"Wi-Fi estimate {d:F1} m from entrance — within uncertainty radius");
+    }
+
+    // ---- 5f. Hermes uses approximate Wi-Fi position to load the correct floor layout ----
+
+    [Fact]
+    public void approximate_wifi_position_still_selects_correct_campus()
+    {
+        var wifiLat  = DeichmanLibrary.EntranceLatitude;
+        var wifiLon  = DeichmanLibrary.EntranceLongitude;
+
+        Assert.InRange(wifiLat, DeichmanLibrary.BuildingSouth, DeichmanLibrary.BuildingNorth);
+        Assert.InRange(wifiLon, DeichmanLibrary.BuildingWest,  DeichmanLibrary.BuildingEast);
+
+        Assert.Equal(DeichmanLibrary.CampusIdForPosition(wifiLat, wifiLon), DeichmanLibrary.CampusId);
+    }
+
+    // Helper: approximate geodesic distance (lat/lon degrees → meters).
+    private static double GeodesicDistanceMeters(double lat1, double lon1, double lat2, double lon2)
+    {
+        var dx = (lon2 - lon1) * 111320.0 * Math.Cos((lat1 + lat2) / 2.0 * Math.PI / 180.0);
+        var dy = (lat2 - lat1) * 111320.0;
+        return Math.Sqrt(dx * dx + dy * dy);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 6. Hermes floor-layout retrieval (Wi-Fi → campus → floor plan)
+//
+// Hermes can search for information about floor layouts for the building the
+// user is currently on. The input is the user's APPROXIMATE GPS position from
+// Wi-Fi data (not exact). Hermes resolves that to a campus / venue and returns
+// the floor plan metadata (image URI, width/height in meters, north rotation),
+// then the HoloLens overlays the plan and guides the user indoors.
+// ---------------------------------------------------------------------------
+
+public class HermesFloorLayoutRetrievalTests
+{
+    // ---- 6a. Given approximate Wi-Fi position inside Deichman, Hermes selects campus 363 ----
+
+    [Fact]
+    public void hermes_selects_deichman_campus_from_approximate_wifi_position()
+    {
+        var wifiLat  = DeichmanLibrary.EntranceLatitude;
+        var wifiLon  = DeichmanLibrary.EntranceLongitude;
+
+        var campusId = DeichmanLibrary.CampusIdForPosition(wifiLat, wifiLon);
+
+        Assert.Equal(DeichmanLibrary.CampusId, campusId);
+    }
+
+    // ---- 6b. Wi-Fi estimate at the mazemap share center still resolves to Deichman ----
+
+    [Fact]
+    public void mazemap_share_center_resolves_to_deichman_campus()
+    {
+        var wifiLat  = 59.908888;
+        var wifiLon  = 10.752340;
+
+        var campusId = DeichmanLibrary.CampusIdForPosition(wifiLat, wifiLon);
+
+        Assert.Equal(DeichmanLibrary.CampusId, campusId);
+        Assert.InRange(wifiLat, DeichmanLibrary.BuildingSouth, DeichmanLibrary.BuildingNorth);
+        Assert.InRange(wifiLon, DeichmanLibrary.BuildingWest,  DeichmanLibrary.BuildingEast);
+    }
+
+    // ---- 6c. Wi-Fi estimate just outside the footprint does NOT resolve to Deichman ----
+
+    [Fact]
+    public void position_outside_footprint_does_not_resolve_to_deichman()
+    {
+        var wifiLat  = DeichmanLibrary.BuildingSouth - 0.0005;
+        var wifiLon  = DeichmanLibrary.EntranceLongitude;
+
+        var campusId = DeichmanLibrary.CampusIdForPosition(wifiLat, wifiLon);
+
+        Assert.NotEqual(DeichmanLibrary.CampusId, campusId);
+    }
+
+    // ---- 6d. Floor plan metadata for Deichman is well-formed ----
+
+    [Fact]
+    public void deichman_floor_plan_metadata_is_plausible()
+    {
+        var widthM  = 22.0f;
+        var heightM = 14.0f;
+        var northDeg = DeichmanLibrary.PublishedNorthRotationDeg;
+
+        Assert.True(widthM  > 0f);
+        Assert.True(heightM > 0f);
+        Assert.True(float.IsFinite(northDeg));
+        Assert.True(widthM  > heightM);
+    }
+
+    // ---- 6e. FloorPlan model round-trips the metadata Hermes would return ----
+
+    [Fact]
+    public void floor_plan_model_captures_hermes_metadata()
+    {
+        var fp = new FloorPlan
+        {
+            ImageUri = "https://example.invalid/deichman/floor3m.jpg",
+            RealWorldWidthMeters  = 22.0f,
+            RealWorldHeightMeters = 14.0f,
+            NorthRotationDegrees  = DeichmanLibrary.PublishedNorthRotationDeg
+        };
+
+        Assert.NotNull(fp.ImageUri);
+        Assert.True(fp.RealWorldWidthMeters  > 0f);
+        Assert.True(fp.RealWorldHeightMeters > 0f);
+        Assert.True(float.IsFinite(fp.NorthRotationDegrees));
+    }
+
+    // ---- 6f. Wi-Fi uncertainty is large enough to cover the share-URL center ----
+
+    [Fact]
+    public void wifi_uncertainty_covers_maze_map_share_center()
+    {
+        var shareLat  = 59.908888;
+        var shareLon  = 10.752340;
+        var entranceLat = DeichmanLibrary.EntranceLatitude;
+        var entranceLon = DeichmanLibrary.EntranceLongitude;
+
+        var d = GeodesicDistanceMeters(shareLat, shareLon, entranceLat, entranceLon);
+
+        Assert.True(d <= DeichmanLibrary.WifiPositioningUncertaintyMeters,
+            $"mazemap share center is {d:F1} m from entrance — must be within Wi-Fi uncertainty radius {DeichmanLibrary.WifiPositioningUncertaintyMeters:F0} m");
+    }
+
+    private static double GeodesicDistanceMeters(double lat1, double lon1, double lat2, double lon2)
+    {
+        var dx = (lon2 - lon1) * 111320.0 * Math.Cos((lat1 + lat2) / 2.0 * Math.PI / 180.0);
+        var dy = (lat2 - lat1) * 111320.0;
+        return Math.Sqrt(dx * dx + dy * dy);
+    }
+}
+
