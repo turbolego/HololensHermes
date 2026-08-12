@@ -1,6 +1,6 @@
 using Windows.ApplicationModel.Core;
 
-namespace HololensSatelliteViewer
+namespace HololensHermes
 {
     // The entry point for the app.
     internal class AppViewSource : IFrameworkViewSource

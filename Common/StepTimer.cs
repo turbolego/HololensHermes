@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace HololensSatelliteViewer.Common
+namespace HololensHermes.Common
 {
     /// <summary>
     /// Helper class for animation and simulation timing.

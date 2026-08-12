@@ -1,9 +1,9 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10" xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest" xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10" IgnorableNamespaces="uap mp">
-  <Identity Name="Turbolego.HololensSatelliteViewer" Publisher="CN=BB1A7F2A-A87C-44C8-8C14-84C6486E7E75" Version="1.0.4.0" />
+  <Identity Name="Turbolego.HololensHermes" Publisher="CN=8388F87F-3AFB-49F1-B35B-3E069B68EEAE" Version="1.0.0.0" />
   <mp:PhoneIdentity PhoneProductId="ff6444f7-13cb-433f-b736-ebeb4dc3fb4e" PhonePublisherId="00000000-0000-0000-0000-000000000000" />
   <Properties>
-    <DisplayName>HololensSatelliteViewer</DisplayName>
+    <DisplayName>HololensHermes</DisplayName>
     <PublisherDisplayName>Turbolego</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
@@ -14,8 +14,8 @@
     <Resource Language="x-generate" />
   </Resources>
   <Applications>
-    <Application Id="App" Executable="$targetnametoken$.exe" EntryPoint="HololensSatelliteViewer.AppView">
-      <uap:VisualElements DisplayName="HololensSatelliteViewer" Square150x150Logo="Assets\Square150x150Logo.png" Square44x44Logo="Assets\Square44x44Logo.png" Description="HoloLens Satellite Tracker" BackgroundColor="#00B2F0">
+    <Application Id="App" Executable="$targetnametoken$.exe" EntryPoint="HololensHermes.AppView">
+      <uap:VisualElements DisplayName="HololensHermes" Square150x150Logo="Assets\Square150x150Logo.png" Square44x44Logo="Assets\Square44x44Logo.png" Description="HoloLens Spatial Assistant + Hermes" BackgroundColor="#00B2F0">
         <uap:SplashScreen Image="Assets\SplashScreen.png" />
         <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png">
           <uap:ShowNameOnTiles>

@@ -16,17 +16,17 @@ using Windows.Graphics.Holographic;
 using Windows.Perception.Spatial;
 using Windows.UI.Input.Spatial;
 
-using HololensSatelliteViewer.Common;
-using HololensSatelliteViewer.Services;
+using HololensHermes.Common;
+using HololensHermes.Services;
 using System.Threading.Tasks;
 using Windows.Foundation;
 using System.Collections.Generic;
 
 #if DRAW_SAMPLE_CONTENT
-using HololensSatelliteViewer.Content;
+using HololensHermes.Content;
 #endif
 
-namespace HololensSatelliteViewer
+namespace HololensHermes
 {
     /// <summary>
     /// Updates, renders, and presents holographic content using Direct3D.
@@ -35,12 +35,22 @@ namespace HololensSatelliteViewer
     {
 
 #if DRAW_SAMPLE_CONTENT
-        // Renders satellites as holograms positioned in world space
-        // relative to user's GPS location and Earth orbit.
-        private SatelliteRenderer satelliteRenderer;
+        // Renders a 2D floor plan overlay and spatial target markers.
+        // FloorPlanRenderer renders the world-locked floor-plan quad;
+        // AnchorRenderer shows pulsing target markers at POI anchors.
+        // SpatialMappingRenderer optionally visualizes the scanned room mesh.
+        private FloorPlanRenderer floorPlanRenderer;
+        private AnchorRenderer anchorRenderer;
+        private SpatialMappingRenderer spatialMappingRenderer;
 
         private SpatialInputHandler spatialInputHandler;
         private CompassService compassService;
+
+        // Floor plan state passed from CalibrationService + FloorPlanService each frame.
+        private Vector3 floorPlanWorldCenter = Vector3.Zero;
+        private AffineFloorPlanTransform floorPlanTransform = new AffineFloorPlanTransform();
+        private bool floorPlanTransformValid = false;
+        private FloorPlan activeFloorPlan;
 #endif
 
         // Cached reference to device resources.
@@ -121,7 +131,9 @@ namespace HololensSatelliteViewer
 
 #if DRAW_SAMPLE_CONTENT
             // Initialize the sample hologram.
-            satelliteRenderer = new SatelliteRenderer(deviceResources);
+            floorPlanRenderer = new FloorPlanRenderer(deviceResources);
+            anchorRenderer = new AnchorRenderer(deviceResources);
+            spatialMappingRenderer = new SpatialMappingRenderer(deviceResources);
 
             spatialInputHandler = new SpatialInputHandler();
 
@@ -172,10 +184,20 @@ namespace HololensSatelliteViewer
         public void Dispose()
         {
 #if DRAW_SAMPLE_CONTENT
-            if (satelliteRenderer != null)
+            if (floorPlanRenderer != null)
             {
-                satelliteRenderer.Dispose();
-                satelliteRenderer = null;
+                floorPlanRenderer.Dispose();
+                floorPlanRenderer = null;
+            }
+            if (anchorRenderer != null)
+            {
+                anchorRenderer.Dispose();
+                anchorRenderer = null;
+            }
+            if (spatialMappingRenderer != null)
+            {
+                spatialMappingRenderer.Dispose();
+                spatialMappingRenderer = null;
             }
 #endif
             if (compassService != null)
@@ -208,35 +230,36 @@ namespace HololensSatelliteViewer
             deviceResources.EnsureCameraResources(holographicFrame, prediction);
 
 #if DRAW_SAMPLE_CONTENT
-            if (stationaryReferenceFrame != null)
-            {
-                // Check for new input state since the last frame.
-                for (int i = 0; i < gamepads.Count; ++i)
+                if (stationaryReferenceFrame != null)
                 {
-                    bool buttonDownThisUpdate = (gamepads[i].gamepad.GetCurrentReading().Buttons & GamepadButtons.A) == GamepadButtons.A;
-                    if (buttonDownThisUpdate && !gamepads[i].buttonAWasPressedLastFrame)
+                    // Check for new input state since the last frame.
+                    for (int i = 0; i < gamepads.Count; ++i)
                     {
-                        pointerPressed = true;
+                        bool buttonDownThisUpdate = (gamepads[i].gamepad.GetCurrentReading().Buttons & GamepadButtons.A) == GamepadButtons.A;
+                        if (buttonDownThisUpdate && !gamepads[i].buttonAWasPressedLastFrame)
+                        {
+                            pointerPressed = true;
+                        }
+                        gamepads[i].buttonAWasPressedLastFrame = buttonDownThisUpdate;
                     }
-                    gamepads[i].buttonAWasPressedLastFrame = buttonDownThisUpdate;
+
+                    SpatialInteractionSourceState pointerState = spatialInputHandler.CheckForInput();
+                    pointerPressed = false;
+
+                    // Always obtain the current head pose every frame so the content
+                    // tracks the user as they move through the room.
+                    SpatialPointerPose headPose = SpatialPointerPose.TryGetAtTimestamp(
+                        stationaryReferenceFrame.CoordinateSystem, prediction.Timestamp);
+
+                    // Read the latest compass heading (updated on background thread by CompassService)
+                    float compassHeading = compassService?.CurrentHeadingDegrees ?? 0f;
+
+                    // Pass per-frame state to the renderers.
+                    UpdateFloorPlanState(headPose, compassHeading);
+                    floorPlanRenderer.UpdateWorldTransform(floorPlanWorldCenter, floorPlanTransform, compassHeading);
+                    anchorRenderer.UpdateWorldTransform(floorPlanWorldCenter, floorPlanTransform, compassHeading);
+                    spatialMappingRenderer.Update(headPose);
                 }
-
-                SpatialInteractionSourceState pointerState = spatialInputHandler.CheckForInput();
-                pointerPressed = false;
-
-                // Always obtain the current head pose every frame so the sky-dome
-                // tracks the user as they move through the room.
-                // SpatialPointerPose.TryGetAtTimestamp reads directly from the
-                // prediction and is always valid while positional tracking is active.
-                SpatialPointerPose headPose = SpatialPointerPose.TryGetAtTimestamp(
-                    stationaryReferenceFrame.CoordinateSystem, prediction.Timestamp);
-
-                // Read the latest compass heading (updated on background thread by CompassService)
-                float compassHeading = compassService?.CurrentHeadingDegrees ?? 0f;
-
-                satelliteRenderer.PositionHologram(headPose);
-                satelliteRenderer.SetCompassHeading(compassHeading);
-            }
 #endif
 
             timer.Tick(() =>
@@ -250,7 +273,10 @@ namespace HololensSatelliteViewer
                 //
 
 #if DRAW_SAMPLE_CONTENT
-                satelliteRenderer.Update(timer);
+                // Update scene objects: animate the anchor pulse, refresh floor-plan state.
+                floorPlanRenderer.Update(timer);
+                anchorRenderer.Update(timer);
+                spatialMappingRenderer.Update(timer);
 #endif
             });
 
@@ -276,7 +302,7 @@ namespace HololensSatelliteViewer
                     {
                         renderingParameters.SetFocusPoint(
                             stationaryReferenceFrame.CoordinateSystem,
-                            satelliteRenderer.Position
+                            floorPlanWorldCenter
                             );
                     }
 #endif
@@ -385,13 +411,15 @@ namespace HololensSatelliteViewer
                         // Only render world-locked content when positional tracking is active.
                         if (cameraActive)
                         {
-                            // Draw the sample hologram.
-                            satelliteRenderer.Render();
+                            // Draw the floor plan overlay, then target markers, then optional room mesh.
+                            floorPlanRenderer.Render(holographicFrame);
+                            anchorRenderer.Render(holographicFrame);
+                            spatialMappingRenderer.Render(holographicFrame);
 
                             if (canCommitDirect3D11DepthBuffer)
                             {
-                                // On versions of the platform that support the CommitDirect3D11DepthBuffer API, we can 
-                                // provide the depth buffer to the system, and it will use depth information to stabilize 
+                                // On versions of the platform that support the CommitDirect3D11DepthBuffer API, we can
+                                // provide the depth buffer to the system, and it will use depth information to stabilize
                                 // the image at a per-pixel level.
                                 HolographicCameraRenderingParameters renderingParameters = holographicFrame.GetRenderingParameters(cameraPose);
                                 SharpDX.Direct3D11.Texture2D depthBuffer = cameraResources.DepthBufferTexture2D;
@@ -402,7 +430,7 @@ namespace HololensSatelliteViewer
                                 IDirect3DSurface depthD3DSurface = InteropStatics.CreateDirect3DSurface(depthDxgiSurface.NativePointer);
                                 if (depthD3DSurface != null)
                                 {
-                                    // Calling CommitDirect3D11DepthBuffer causes the system to queue Direct3D commands to 
+                                    // Calling CommitDirect3D11DepthBuffer causes the system to queue Direct3D commands to
                                     // read the depth buffer. It will then use that information to stabilize the image as
                                     // the HolographicFrame is presented.
                                     renderingParameters.CommitDirect3D11DepthBuffer(depthD3DSurface);
@@ -447,11 +475,11 @@ namespace HololensSatelliteViewer
         /// </summary>
         public void OnDeviceLost(Object sender, EventArgs e)
         {
-
 #if DRAW_SAMPLE_CONTENT
-            satelliteRenderer.ReleaseDeviceDependentResources();
+            floorPlanRenderer?.ReleaseDeviceDependentResources();
+            anchorRenderer?.ReleaseDeviceDependentResources();
+            spatialMappingRenderer?.ReleaseDeviceDependentResources();
 #endif
-
         }
 
         /// <summary>
@@ -460,11 +488,31 @@ namespace HololensSatelliteViewer
         public void OnDeviceRestored(Object sender, EventArgs e)
         {
 #if DRAW_SAMPLE_CONTENT
-            satelliteRenderer.CreateDeviceDependentResourcesAsync();
+            floorPlanRenderer?.CreateDeviceDependentResourcesAsync();
+            anchorRenderer?.CreateDeviceDependentResourcesAsync();
+            spatialMappingRenderer?.CreateDeviceDependentResourcesAsync();
 #endif
         }
 
-        void OnLocatabilityChanged(SpatialLocator sender, Object args)
+        /// <summary>
+        /// Update the floor plan state used for rendering.
+        /// </summary>
+        private void UpdateFloorPlanState(SpatialPointerPose headPose, float compassHeading)
+        {
+            // By default the floor plan is anchored at the stationary reference frame origin.
+            // In a full app this would come from CalibrationService / AnchorStoreService.
+            if (!floorPlanTransformValid && activeFloorPlan != null)
+            {
+                // Place the floor plan at the origin, rotated by the floor plan's north rotation.
+                floorPlanTransform = new AffineFloorPlanTransform
+                {
+                    Scale = 1f,
+                    RotationRadians = activeFloorPlan.NorthRotationDegrees * ((float)Math.PI / 180f),
+                    Translation = floorPlanWorldCenter
+                };
+                floorPlanTransformValid = true;
+            }
+        }
         {
             switch (sender.Locatability)
             {

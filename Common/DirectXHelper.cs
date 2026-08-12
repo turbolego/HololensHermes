@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 using Windows.Storage;
 using System.Numerics;
 
-namespace HololensSatelliteViewer.Common
+namespace HololensHermes.Common
 {
     internal static class DirectXHelper
     {

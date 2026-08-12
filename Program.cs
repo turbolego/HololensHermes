@@ -1,7 +1,7 @@
 using System;
 using Windows.ApplicationModel.Core;
 
-namespace HololensSatelliteViewer
+namespace HololensHermes
 {
     /// <summary>
     /// Windows Holographic application using SharpDX.

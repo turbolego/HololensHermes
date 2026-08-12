@@ -8,7 +8,7 @@ using Windows.Graphics.DirectX.Direct3D11;
 using System.Runtime.InteropServices;
 using System;
 
-namespace HololensSatelliteViewer.Common
+namespace HololensHermes.Common
 {
     /// <summary>
     /// Constant buffer used to send hologram position transform to the shader pipeline.

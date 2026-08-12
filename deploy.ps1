@@ -12,11 +12,11 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 if (-not $ProjectPath) {
-    $ProjectPath = Join-Path $PSScriptRoot 'HololensSatelliteViewer.csproj'
+    $ProjectPath = Join-Path $PSScriptRoot 'HololensHermes.csproj'
 }
 
 if (-not $CertificatePath) {
-    $CertificatePath = Join-Path $PSScriptRoot 'HololensSatelliteViewer_TemporaryKey.pfx'
+    $CertificatePath = Join-Path $PSScriptRoot 'HololensHermes_TemporaryKey.pfx'
 }
 
 function Get-MsBuildPath {
@@ -24,14 +24,12 @@ function Get-MsBuildPath {
     if (Test-Path $default) {
         return $default
     }
-
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
     if (Test-Path $vswhere) {
         $path = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find 'MSBuild\Current\Bin\MSBuild.exe' | Select-Object -First 1
         if ($path -and (Test-Path $path)) {
             return $path
         }
-
         $installPath = & $vswhere -latest -products * -property installationPath
         if ($installPath) {
             $candidate = Join-Path $installPath 'MSBuild\Current\Bin\MSBuild.exe'
@@ -40,21 +38,18 @@ function Get-MsBuildPath {
             }
         }
     }
-
     throw 'MSBuild.exe was not found.'
 }
 
 function Get-WinAppDeployCmdPath {
     $sdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
     $candidate = Get-ChildItem $sdkRoot -Recurse -Filter WinAppDeployCmd.exe -ErrorAction SilentlyContinue |
-        Where-Object { $_.FullName -match '\\x64\\' } |
+        Where-Object { $_.FullName -match '\\\\x64\\\\' } |
         Sort-Object FullName |
         Select-Object -Last 1 -ExpandProperty FullName
-
     if ($candidate) {
         return $candidate
     }
-
     throw 'WinAppDeployCmd.exe was not found.'
 }
 
@@ -63,16 +58,13 @@ function Get-LatestAppPackageFolder {
     if (-not (Test-Path $packageRoot)) {
         throw "AppPackages folder not found: $packageRoot"
     }
-
     $folder = Get-ChildItem $packageRoot -Directory |
         Where-Object { $_.Name -like '*_x86_Test' } |
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
-
     if (-not $folder) {
         throw "No x86 test package folder found under $packageRoot"
     }
-
     return $folder.FullName
 }
 
@@ -82,7 +74,6 @@ function Uninstall-ExistingPackage {
         [string]$IpAddress,
         [string]$PackageNamePrefix
     )
-
     $installed = & $WadcPath list -ip $IpAddress 2>$null | Select-String $PackageNamePrefix
     foreach ($entry in $installed) {
         $package = $entry.Line.Trim()
@@ -132,7 +123,7 @@ $dependencies = @(
 Write-Host "Checking for HoloLens at $DeviceIp..."
 & $wadc devices | Out-Host
 
-Uninstall-ExistingPackage -WadcPath $wadc -IpAddress $DeviceIp -PackageNamePrefix 'HololensSatelliteViewer_'
+Uninstall-ExistingPackage -WadcPath $wadc -IpAddress $DeviceIp -PackageNamePrefix 'HololensHermes_'
 
 Write-Host "Installing $($appx.FullName)..."
 $installArgs = @('install', '-f', $appx.FullName, '-ip', $DeviceIp)

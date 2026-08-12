@@ -1,27 +1,16 @@
-# HololensSatelliteViewer
+# HololensHermes
 
 <a href="https://get.microsoft.com/installer/download/9nr3z5g9gbj7?referrer=appbadge" target="_self" >
 	<img src="https://get.microsoft.com/images/en-us%20dark.svg" width="200"/>
 </a>
 
-[View Microsoft Store page](https://apps.microsoft.com/detail/9nr3z5g9gbj7?hl=en-GB&gl=NO)
+[HoloLens Hermès](https://apps.microsoft.com/detail/9nr3z5g9gbj7?hl=en-GB&gl=NO) —
+indoor spatial assistant for **Microsoft HoloLens 1**, connected to **Hermes** via Telegram.
 
-[![UWP Build](https://github.com/turbolego/HololensSatelliteViewer/actions/workflows/dotnet.yml/badge.svg)](https://github.com/turbolego/HololensSatelliteViewer/actions/workflows/dotnet.yml)
-[![UWP Package](https://github.com/turbolego/HololensSatelliteViewer/actions/workflows/dotnet-desktop.yml/badge.svg)](https://github.com/turbolego/HololensSatelliteViewer/actions/workflows/dotnet-desktop.yml)
-[![Store Submission](https://github.com/turbolego/HololensSatelliteViewer/actions/workflows/store-submission.yml/badge.svg)](https://github.com/turbolego/HololensSatelliteViewer/actions/workflows/store-submission.yml)
-![Platform x86](https://img.shields.io/badge/platform-x86-blue)
-![SDK 10.0.19041](https://img.shields.io/badge/Windows%20SDK-10.0.19041-blue)
-![HoloLens 1](https://img.shields.io/badge/HoloLens-1st%20gen-blueviolet)
-
-Real-time satellite tracker for **Microsoft HoloLens 1** built on the UWP platform.
-
-Satellites are rendered as holographic 3D cubes in the dome **above** the user,
-positioned from real Two-Line Element (TLE) data fetched from
-[CelesTrak](https://celestrak.org/). A debug panel below the GPS location shows
-each satellite's name, azimuth, elevation, and relative position.
----
-
-<img width="1408" height="792" alt="2953" src="https://github.com/user-attachments/assets/d827aa66-2a03-4f56-a6e5-423079ef0861" />
+The app uses HoloLens 1's on-device spatial mapping and world-locked anchors to place
+2D floor plans and target markers in the real world, and connects to Hermes over Telegram
+for goal-directed indoor navigation (e.g. find a book in the library, find a furniture
+section in a store).
 
 ---
 
@@ -34,7 +23,6 @@ each satellite's name, azimuth, elevation, and relative position.
 - [Build](#build)
 - [Deploy to HoloLens](#deploy-to-holoLens)
 - [CI / CD](#ci--cd)
-- [Microsoft Store](#microsoft-store)
 - [Privacy Policy](#privacy-policy)
 
 ---
@@ -43,37 +31,36 @@ each satellite's name, azimuth, elevation, and relative position.
 
 Put on the HoloLens and launch the app:
 
-- Satellites appear as small coloured cubes **above you** in a dome arrangement,
-  their positions computed from live TLE orbital data and your GPS location.
-  The brightest (closest) 10 satellites are shown.
-- A **text panel** floats in front of you below eye level, listing:
-  - Your current **GPS coordinates**
-  - TLE data stats (loaded, propagated, above horizon)
-  - Each visible satellite's **name, azimuth, elevation, and relative X/Z position**
-- Because black pixels are transparent on HoloLens's see-through display, the
-  scene appears to **float in the real world** — no background, no window frame.
+- A 2D floor plan overlays the real floor, world-locked and compass-rotated (building
+  orientation stays correct as you turn).
+- Tap a real surface to ask Hermes "find X" — a pulsing target marker + arrow appears,
+  world-locked at the target location on the floor plan.
+- The floor plan + target markers persist across sessions via `SpatialAnchorStore`.
+- Telegram companion: you can query and report from your phone; Hermes answers with a
+  floor-plan hotspot and the HoloLens shows the world-locked target.
 
 ---
 
 ## How It Works
 
 | Step | Detail |
-|---|---|
-| **GPS** | HoloLens `Geolocator` gets the device's current lat/lon/altitude |
-| **TLE fetch** | Fetches active satellite Two-Line Elements from CelesTrak every second |
-| **Orbit propagation** | SGP4 propagator computes each satellite's topocentric azimuth, elevation, and range from the observer |
-| **Sorting** | The 10 closest satellites are selected by range |
-| **Rendering** | Direct3D 11 holographic pipeline draws each satellite as a colour-coded cube with a label above it, positioned 0.4 m to the ceiling (with some vertical spread per elevation) |
-| **Text panel** | Custom bitmap glyph rendering via a geometry shader animates the info list in 3D at a fixed offset from the user's head position |
+|------|--------|
+| **Floor plan** | 2D floor-plan image (PNG from the venue's website) is loaded as a texture, scaled to real meters by calibration, and rendered as a world-locked quad on the floor |
+| **Calibration** | Multi-point (3+): the user walks to known floor-plan points and taps; the app solves the affine transform from image pixels → world meters |
+| **Spatial mapping** | `SpatialSurfaceObserver` keeps the room/store mesh up to date; the user can toggle mesh visualization to check coverage |
+| **Targets** | Hermes API resolves a goal ("find the philosophy section", "find MALM dresser") to a floor-plan position; the app places a `SpatialAnchor` there and shows a pulsing marker + arrow |
+| **Compass** | `CompassService` (IMU magnetometer) rotates the floor plan + arrow so north stays north as the user turns |
+| **Telegram** | The app stores the user's Telegram username + password + bot id in the Windows Credential Vault; the bot id (BotFather token) is used to call the Telegram Bot API over HTTPS |
+| **Hermes** | `HermesApiService` calls the Hermes backend over HTTPS (goal resolution, floor-plan metadata) using the same `HttpClient` + `Windows.Data.Json` pattern as the existing viewers |
 
-No external render engine — all rendering is custom Direct3D 11 with SharpDX.
+No external render engine — all rendering is custom Direct3D 11 with SharpDX (forked from the HololensSatelliteViewer holographic pipeline).
 
 ---
 
 ## Project Structure
 
 ```
-HololensSatelliteViewer/
+HololensHermes/
 ├── .github/workflows/
 │   ├── dotnet.yml              # CI compile check (Debug + Release)
 │   ├── dotnet-desktop.yml      # Signed .appxupload artifact on push
@@ -82,25 +69,28 @@ HololensSatelliteViewer/
 ├── Common/
 │   └── DeviceResources.cs      # Direct3D device management
 ├── Content/
-│   ├── SatelliteRenderer.cs    # Holographic satellite cube + text rendering
+│   ├── FloorPlanRenderer.cs    # 2D floor-plan quad, world-locked, compass-rotated
+│   ├── SpatialMappingRenderer.cs  # Optional mesh visualization
+│   ├── AnchorRenderer.cs       # Pulsing target marker + arrow at a POI anchor
 │   ├── SpatialInputHandler.cs  # Gesture/click input
-│   └── SpinningCubeRenderer.cs # Sample cube (from template)
-├── Helpers/
-│   └── HolographicPositioning.cs  # Lat/lon/alt to world coordinates
+│   └── Shaders/                # D3D11 shaders (shared with the viewer scaffold)
 ├── Models/
-│   └── Satellite.cs            # Satellite data model (az/el/range/name)
+│   └── FloorPlan.cs            # Floor plan metadata (image URI, size in meters, north rotation)
 ├── Services/
-│   ├── GeolocationService.cs   # HoloLens GPS provider
-│   ├── OrbitService.cs         # TLE fetch + topocentric calculations
-│   ├── Sgp4Service.cs          # Kepler / simplified SGP4 propagator
-│   └── TleService.cs           # CelesTrak HTTP client
+│   ├── HermesApiService.cs     # HTTPS client to Hermes backend (goal, floor-plan, feedback)
+│   ├── TelegramService.cs      # Telegram Bot API wrapper + Credential Vault storage
+│   ├── FloorPlanService.cs     # Floor plan bitmap loading + affine transform solver
+│   ├── CalibrationService.cs   # Multi-point calibration (user taps known floor-plan points)
+│   ├── SpatialMappingService.cs  # Wraps SpatialSurfaceObserver
+│   ├── AnchorStoreService.cs  # Persist SpatialAnchors via SpatialAnchorStore
+│   └── CompassService.cs      # IMU magnetometer heading (reused from viewer scaffold)
 ├── privacy/
 │   └── index.html              # Privacy policy (served via GitHub Pages)
-├── properties/
+├── Properties/
 │   └── AssemblyInfo.cs
 ├── BasicHologramMain.cs        # App lifecycle + holographic frame loop
-├── HololensSatelliteViewer.csproj  # UWP project — .NETCore 5.0, x86
-├── HololensSatelliteViewer_TemporaryKey.pfx  # Dev signing cert
+├── HololensHermes.csproj       # UWP project — .NETCore 5.0, x86
+├── HololensHermes_TemporaryKey.pfx  # Dev signing cert
 ├── Package.appxmanifest        # Identity, capabilities, logos
 └── deploy.ps1                  # One-shot deploy to HoloLens over USB
 ```
@@ -110,12 +100,14 @@ HololensSatelliteViewer/
 ## Prerequisites
 
 | Requirement | Version / Notes |
-|---|---|
+|-------------|-----------------|
 | Windows | 10 or 11 (64-bit) |
 | Visual Studio 2022 | Community (free) or higher — **UWP workload** required |
 | Windows 10 SDK | **10.0.19041.0** (included in UWP workload) |
 | HoloLens 1 | Developer Mode enabled |
 | Cable | Micro-USB to USB-A |
+| Hermes backend | Running and reachable from the HoloLens (Wi-Fi or USB RNDIS) |
+| Telegram bot | Created via @BotFather; bot token (bot id) provided in-app |
 
 ---
 
@@ -131,7 +123,7 @@ $msbuild = "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Curr
 ### Debug build — compile check only
 
 ```powershell
-& $msbuild HololensSatelliteViewer.csproj `
+& $msbuild HololensHermes.csproj `
     /p:Configuration=Debug `
     /p:Platform=x86 `
     /p:AppxPackageSigningEnabled=false `
@@ -142,7 +134,7 @@ $msbuild = "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Curr
 ### Release build — signed .appxupload (Store-ready)
 
 ```powershell
-& $msbuild HololensSatelliteViewer.csproj `
+& $msbuild HololensHermes.csproj `
     /t:Publish `
     /p:Configuration=Release `
     /p:Platform=x86 `
@@ -150,12 +142,12 @@ $msbuild = "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Curr
     /p:UapAppxPackageBuildMode=StoreUpload `
     /p:AppxPackageDir=AppPackages\ `
     /p:AppxPackageSigningEnabled=true `
-    /p:PackageCertificateKeyFile=HololensSatelliteViewer_TemporaryKey.pfx `
+    /p:PackageCertificateKeyFile=HololensHermes_TemporaryKey.pfx `
     /p:PackageCertificatePassword=ci `
     /v:minimal
 ```
 
-Output lands in `AppPackages\HololensSatelliteViewer_1.0.0.0_x86_Test\`.
+Output lands in `AppPackages\HololensHermes_1.0.0.0_x86_Test\`.
 
 ---
 
@@ -181,9 +173,9 @@ $wadc = (Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin"
     Sort-Object FullName | Select-Object -Last 1).FullName
 
 # Install the .appx + dependencies
-$pkg = "AppPackages\HololensSatelliteViewer_1.0.0.0_x86_Test"
+$pkg = "AppPackages\HololensHermes_1.0.0.0_x86_Test"
 & $wadc install `
-    -f  "$pkg\HololensSatelliteViewer_1.0.0.0_x86.appx" `
+    -f  "$pkg\HololensHermes_1.0.0.0_x86.appx" `
     -ip 127.0.0.1 `
     -d  "$pkg\Dependencies\x86\Microsoft.NET.Native.Framework.1.3.appx" `
     -d  "$pkg\Dependencies\x86\Microsoft.NET.Native.Runtime.1.4.appx" `
@@ -205,7 +197,7 @@ powershell -ExecutionPolicy Bypass -File .\deploy.ps1
 Three GitHub Actions workflows run on `windows-2022` runners.
 
 | Workflow | Trigger | Produces |
-|---|---|---|
+|----------|---------|----------|
 | `dotnet.yml` | Push / PR to `master` | Compile check (Debug + Release) |
 | `dotnet-desktop.yml` | Push to `master` | Signed `.appxupload` artifact |
 | `store-submission.yml` | Tag `v*.*.*` | `.appxupload` + WACK + optional Store publish |
@@ -231,22 +223,13 @@ Triggered by a `v*.*.*` git tag. Same build as above plus:
 
 ---
 
-## Microsoft Store
-
-The `.appxupload` from the CI artifact can be uploaded directly to
-[Partner Center](https://partner.microsoft.com/dashboard).
-
-Supported architecture: **x86** (HoloLens 1).
-
-Package identity: `Turbolego.HololensSatelliteViewer`
-Publisher: `CN=BB1A7F2A-A87C-44C8-8C14-84C6486E7E75`
-
----
-
 ## Privacy Policy
 
-This app does not collect or transmit personal information. The location,
-webcam, and microphone capabilities are used exclusively for HoloLens platform
-operation — no data leaves the device except for public TLE requests to CelesTrak.
+This app does not collect or transmit personal information except for the
+purpose of goal-directed indoor navigation with Hermes. The location, webcam,
+and microphone capabilities are used exclusively for HoloLens platform
+operation. Telegram credentials (username, password, bot id) are stored
+locally in the Windows Credential Vault and are never transmitted except
+as needed to call the Telegram Bot API on the user's behalf.
 
-Full policy: https://turbolego.github.io/HololensSatelliteViewer/privacy/
+Full policy: https://turbolego.github.io/HololensHermes/privacy/

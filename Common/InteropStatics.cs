@@ -2,7 +2,7 @@ using System;
 using System.Runtime.InteropServices;
 using Windows.Graphics.DirectX.Direct3D11;
 
-namespace HololensSatelliteViewer.Common
+namespace HololensHermes.Common
 {
     public static class InteropStatics
     {

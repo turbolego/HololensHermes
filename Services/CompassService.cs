@@ -1,7 +1,7 @@
 using System;
 using Windows.Devices.Sensors;
 
-namespace HololensSatelliteViewer.Services
+namespace HololensHermes.Services
 {
     /// <summary>
     /// Wraps the HoloLens 1 compass sensor (Windows.Devices.Sensors.Compass).

@@ -5,9 +5,9 @@ using Windows.ApplicationModel.Activation;
 using Windows.ApplicationModel.Core;
 using Windows.Graphics.Holographic;
 using Windows.UI.Core;
-using HololensSatelliteViewer.Common;
+using HololensHermes.Common;
 
-namespace HololensSatelliteViewer
+namespace HololensHermes
 {
     /// <summary>
     /// The IFrameworkView connects the app with Windows and handles application lifecycle events.
