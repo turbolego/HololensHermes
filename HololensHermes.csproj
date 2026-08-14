@@ -72,6 +72,7 @@
     <Compile Include="Common\DirectXHelper.cs" />
     <Compile Include="Common\Disposer.cs" />
     <Compile Include="Common\InteropStatics.cs" />
+    <Compile Include="Common\ShaderBytecodeLoader.cs" />
     <Compile Include="Common\StepTimer.cs" />
     <Compile Include="Content\ShaderStructures.cs" />
     <Compile Include="Content\SpatialInputHandler.cs" />

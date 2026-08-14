@@ -43,13 +43,13 @@ namespace HololensHermes.Services
                 using (var stream = await file.OpenAsync(FileAccessMode.Read))
                 {
                     var decoder = await BitmapDecoder.CreateAsync(stream);
-                    if (decoder.BitmapPixelWidth == 0 || decoder.BitmapPixelHeight == 0)
+                    if (decoder.PixelWidth == 0 || decoder.PixelHeight == 0)
                         return null;
 
                     var transform = new BitmapTransform
                     {
                         ScaledWidth = (uint)desiredPixelWidth,
-                        ScaledHeight = (uint)(desiredPixelWidth * decoder.BitmapPixelHeight / decoder.BitmapPixelWidth)
+                        ScaledHeight = (uint)(desiredPixelWidth * decoder.PixelHeight / decoder.PixelWidth)
                     };
                     await decoder.GetPixelDataAsync(
                         BitmapPixelFormat.Bgra8,

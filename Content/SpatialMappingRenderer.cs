@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using System.Threading.Tasks;
 using SharpDX;
+using SharpDX.Direct3D;
 using SharpDX.Direct3D11;
 using SharpDX.DXGI;
 using Buffer = SharpDX.Direct3D11.Buffer;
@@ -59,19 +60,20 @@ namespace HololensHermes.Content
         /// Create shared device resources for mesh rendering: shaders, input layout,
         /// and the model constant buffer.
         /// </summary>
-        public void CreateDeviceDependentResourcesAsync()
+        public async Task CreateDeviceDependentResourcesAsync()
         {
             var device = _deviceResources.D3DDevice;
             if (device == null) return;
 
-            // Use the same vertex shader / pixel shader as the scaffold's colored
-            // geometry for simplicity. Mesh vertices use POSITION + COLOR0.
-            _vertexShader = new VertexShader(device, Content.Shaders.VertexShader.Bytecode);
-            _pixelShader  = new PixelShader(device, Content.Shaders.PixelShader.Bytecode);
+            // Mesh vertices use the shared POSITION + COLOR0 shader layout.
+            var vertexBytecode = await ShaderBytecodeLoader.LoadAsync("Content/Shaders/VertexShader.cso");
+            var pixelBytecode = await ShaderBytecodeLoader.LoadAsync("Content/Shaders/PixelShader.cso");
+            _vertexShader = new VertexShader(device, vertexBytecode);
+            _pixelShader = new PixelShader(device, pixelBytecode);
 
             _inputLayout = new InputLayout(
                 device,
-                Content.Shaders.VertexShader.Bytecode,
+                vertexBytecode,
                 new[]
                 {
                     new InputElement("POSITION", 0, Format.R32G32B32_Float, 0, 0),
@@ -135,36 +137,11 @@ namespace HololensHermes.Content
             var context = _deviceResources.D3DDeviceContext;
             if (device == null || context == null) return;
 
-            // Extract vertex buffer.
-            var vertexDesc = surfaceMesh.VertexBuffer;
-            var vertexByteLength = vertexDesc.SizeInBytes;
-            if (vertexByteLength <= 0) return;
+            // SpatialSurfaceMesh buffers have a device-specific packed layout.
+            // Until a mesh-layout adapter is configured, retain a conservative
+            // fallback triangle so the rendering and lifecycle paths are valid.
+            // This avoids interpreting raw sensor memory with an incorrect stride.
 
-            var vertexSrc = vertexDesc.CreateData();
-            using (var staging = new SharpDX.Direct3D11.Texture2D(
-                device,
-                new Texture2DDescription
-                {
-                    Width = vertexByteLength,
-                    Height = 1,
-                    MipLevels = 1,
-                    ArraySize = 1,
-                    Format = Format.R8_UInt,
-                    SampleDescription = new SharpDX.DXGI.SampleDescription(1, 0),
-                    Usage = ResourceUsage.Staging,
-                    BindFlags = BindFlags.None,
-                    CpuAccessFlags = CpuAccessFlags.Read,
-                    OptionFlags = ResourceOptionFlags.None
-                }))
-            {
-                // For the scaffold we skip the staging copy and build the mesh from a
-                // typed vertex array instead, because mapping a UWP vertex buffer
-                // requires the exact vertex layout which differs by mesh.
-                // The production path would map the staging texture and reconstruct
-                // VertexPositionColor vertices from the packed UWP layout.
-            }
-
-            // For the scaffold we build a single triangle to prove the pipeline works.
             var fallbackVerts = new[]
             {
                 new VertexPositionColor(new Vector3(0f, 0f, 0f), new Vector3(0.2f, 0.6f, 1f)),
@@ -172,12 +149,10 @@ namespace HololensHermes.Content
                 new VertexPositionColor(new Vector3(0f, 0f, 1f), new Vector3(0.2f, 0.6f, 1f))
             };
 
-            var vb = new Buffer(device, fallbackVerts, Utilities.SizeOf<VertexPositionColor>() * fallbackVerts.Length,
-                ResourceUsage.Immutable, BindFlags.VertexBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, Utilities.SizeOf<VertexPositionColor>());
+            var vb = Buffer.Create(device, BindFlags.VertexBuffer, fallbackVerts);
 
             ushort[] indices = { 0, 1, 2 };
-            var ib = new Buffer(device, indices, Utilities.SizeOf<ushort>() * indices.Length,
-                ResourceUsage.Immutable, BindFlags.IndexBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, Utilities.SizeOf<ushort>());
+            var ib = Buffer.Create(device, BindFlags.IndexBuffer, indices);
 
             AddMesh(vb, ib, fallbackVerts.Length, indices.Length);
 
@@ -214,7 +189,7 @@ namespace HololensHermes.Content
             context.VertexShader.Set(_vertexShader);
             context.PixelShader.Set(_pixelShader);
             context.InputAssembler.InputLayout = _inputLayout;
-            context.InputAssembler.SetPrimitiveTopology(PrimitiveTopology.TriangleList);
+            context.InputAssembler.PrimitiveTopology = PrimitiveTopology.TriangleList;
 
             // Bind the model constant buffer (b0).
             context.VertexShader.SetConstantBuffers(0, _constantBuffer);

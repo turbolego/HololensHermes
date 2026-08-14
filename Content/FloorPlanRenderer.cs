@@ -77,7 +77,7 @@ namespace HololensHermes.Content
         /// that the floor plan image can be fetched asynchronously (network or
         /// app-local assets) without blocking the render thread.
         /// </summary>
-        public void CreateDeviceDependentResourcesAsync()
+        public async Task CreateDeviceDependentResourcesAsync()
         {
             var device = _deviceResources.D3DDevice;
             if (device == null)
@@ -85,14 +85,16 @@ namespace HololensHermes.Content
                 return;
             }
 
-            // Load vertex shader from the project shader entry point.
-            _vertexShader = new VertexShader(device, Content.Shaders.FloorPlanVertexShader.Bytecode);
-            _pixelShader = new PixelShader(device, Content.Shaders.FloorPlanPixelShader.Bytecode);
+            // The FxCompile target produces deployed .cso assets.
+            var vertexBytecode = await ShaderBytecodeLoader.LoadAsync("Content/Shaders/FloorPlanVertexShader.cso");
+            var pixelBytecode = await ShaderBytecodeLoader.LoadAsync("Content/Shaders/FloorPlanPixelShader.cso");
+            _vertexShader = new VertexShader(device, vertexBytecode);
+            _pixelShader = new PixelShader(device, pixelBytecode);
 
             // Input layout: POSITION (3 floats) + TEXCOORD0 (2 floats).
             _inputLayout = new InputLayout(
                 device,
-                Content.Shaders.FloorPlanVertexShader.Bytecode,
+                vertexBytecode,
                 new[]
                 {
                     new InputElement("POSITION", 0, Format.R32G32B32_Float, 0, 0),
@@ -175,8 +177,8 @@ namespace HololensHermes.Content
                 {
                     var textureDescription = new Texture2DDescription
                     {
-                        Width = decoder.BitmapPixelWidth,
-                        Height = decoder.BitmapPixelHeight,
+                        Width = decoder.PixelWidth,
+                        Height = decoder.PixelHeight,
                         MipLevels = 1,
                         ArraySize = 1,
                         Format = Format.B8G8R8A8_UNorm,
@@ -186,8 +188,8 @@ namespace HololensHermes.Content
                         CpuAccessFlags = CpuAccessFlags.None,
                         OptionFlags = ResourceOptionFlags.None
                     };
-                    var dataBox = new SharpDX.DataBox(data.DataPointer, (int)decoder.BitmapPixelWidth * 4, 0);
-                    _floorPlanTexture = new Texture2D(device, textureDescription, dataBox);
+                    var dataRectangle = new SharpDX.DataRectangle(data.DataPointer, (int)decoder.PixelWidth * 4);
+                    _floorPlanTexture = new Texture2D(device, textureDescription, dataRectangle);
                 }
 
                 _floorPlanTextureSRV = new ShaderResourceView(device, _floorPlanTexture);

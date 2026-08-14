@@ -58,17 +58,19 @@ namespace HololensHermes.Content
             _deviceResources = deviceResources;
         }
 
-        public void CreateDeviceDependentResourcesAsync()
+        public async Task CreateDeviceDependentResourcesAsync()
         {
             var device = _deviceResources.D3DDevice;
             if (device == null) return;
 
-            _vertexShader = new VertexShader(device, Content.Shaders.AnchorVertexShader.Bytecode);
-            _pixelShader  = new PixelShader(device, Content.Shaders.AnchorPixelShader.Bytecode);
+            var vertexBytecode = await ShaderBytecodeLoader.LoadAsync("Content/Shaders/AnchorVertexShader.cso");
+            var pixelBytecode = await ShaderBytecodeLoader.LoadAsync("Content/Shaders/AnchorPixelShader.cso");
+            _vertexShader = new VertexShader(device, vertexBytecode);
+            _pixelShader = new PixelShader(device, pixelBytecode);
 
             _inputLayout = new InputLayout(
                 device,
-                Content.Shaders.AnchorVertexShader.Bytecode,
+                vertexBytecode,
                 new[]
                 {
                     new InputElement("POSITION", 0, Format.R32G32B32_Float, 0, 0),

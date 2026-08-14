@@ -93,8 +93,11 @@ namespace HololensHermes.Services
             try
             {
                 var vault = new PasswordVault();
-                var cred = vault.Retrieve(_storageKey, null);
-                var username = cred.UserName;
+                var botId = GetBotId();
+                if (string.IsNullOrWhiteSpace(botId))
+                {
+                    return false;
+                }
 
                 // Retrieve stored chat id if present.
                 string chatId = null;
@@ -122,8 +125,11 @@ namespace HololensHermes.Services
 
                 var uri = $"https://api.telegram.org/bot{Uri.EscapeDataString(botId)}/sendMessage";
                 var content = new StringContent(payload.ToString(), Encoding.UTF8, "application/json");
-                var resp = await http.PostAsync(uri, content);
-                return resp.IsSuccessStatusCode;
+                using (var http = new HttpClient())
+                {
+                    var resp = await http.PostAsync(uri, content);
+                    return resp.IsSuccessStatusCode;
+                }
             }
             catch
             {
@@ -151,9 +157,5 @@ namespace HololensHermes.Services
             return sb.ToString();
         }
 
-        private static StringBuilder JsonStringEscape(StringBuilder s)
-        {
-            return JsonStringEscape(s.ToString());
-        }
     }
 }
