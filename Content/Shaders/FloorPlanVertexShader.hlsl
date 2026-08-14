@@ -3,12 +3,13 @@
 // Reuses the shared ModelConstantBuffer (b0) + ViewProjectionConstantBuffer (b1)
 // convention used by the existing holographic scaffold.
 
-#include "VertexShaderShared.hlsl"
+#include "HolographicShaderShared.hlsl"
 
 struct FloorPlanVertexInput
 {
     min16float3 pos   : POSITION;
     min16float2 uv    : TEXCOORD0;
+    uint        instId : SV_InstanceID;
 };
 
 struct FloorPlanVertexOutput

@@ -80,8 +80,10 @@
     <Compile Include="Content\AnchorRenderer.cs" />
     <Compile Include="Models\FloorPlan.cs" />
     <Compile Include="Models\StoredCredential.cs" />
+    <Compile Include="Navigation\IndoorNavigation.cs" />
     <Compile Include="Services\CompassService.cs" />
     <Compile Include="Services\HermesApiService.cs" />
+    <Compile Include="Services\LocationService.cs" />
     <Compile Include="Services\TelegramService.cs" />
     <Compile Include="Services\FloorPlanService.cs" />
     <Compile Include="Services\CalibrationService.cs" />

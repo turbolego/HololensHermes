@@ -4,13 +4,14 @@
 // ViewProjectionConstantBuffer (b1) from CameraResources.
 // Instance ID is used to select left/right view for stereo rendering.
 
-#include "VertexShaderShared.hlsl"
+#include "HolographicShaderShared.hlsl"
 
 struct AnchorVertexInput
 {
     min16float3 pos   : POSITION;
     min16float3 color : COLOR0;
     min16float2 uv    : TEXCOORD0;
+    uint        instId : SV_InstanceID;
 };
 
 struct AnchorVertexOutput

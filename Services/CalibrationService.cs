@@ -1,8 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Numerics;
-using Windows.Perception.Spatial;
-using Windows.UI.Input.Spatial;
+using Windows.Foundation;
+using SharpDX;
 
 namespace HololensHermes.Services
 {

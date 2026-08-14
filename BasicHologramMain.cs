@@ -21,6 +21,8 @@ using HololensHermes.Services;
 using System.Threading.Tasks;
 using Windows.Foundation;
 using System.Collections.Generic;
+using SharpDX;
+using HololensHermes.Navigation;
 
 #if DRAW_SAMPLE_CONTENT
 using HololensHermes.Content;
@@ -45,6 +47,8 @@ namespace HololensHermes
 
         private SpatialInputHandler spatialInputHandler;
         private CompassService compassService;
+        private LocationService locationService;
+        private LocationEstimate latestLocationEstimate;
 
         // Floor plan state passed from CalibrationService + FloorPlanService each frame.
         private Vector3 floorPlanWorldCenter = Vector3.Zero;
@@ -140,6 +144,12 @@ namespace HololensHermes
             // Initialize compass for heading-based dome rotation
             compassService = new CompassService();
             compassService.Initialize();
+
+            // Windows reports a coordinate plus an uncertainty radius. This
+            // estimate is used only to select a candidate venue; calibration and
+            // spatial anchors remain the source of truth for indoor placement.
+            locationService = new LocationService();
+            var locationRefresh = RefreshLocationEstimateAsync();
 #endif
 
             if (canGetDefaultHolographicDisplay)
@@ -495,6 +505,19 @@ namespace HololensHermes
         }
 
         /// <summary>
+        /// Retrieves a recent coarse location estimate without blocking the
+        /// holographic frame loop. A missing or low-quality estimate is retained
+        /// as unavailable so no venue can be selected accidentally.
+        /// </summary>
+        private async Task RefreshLocationEstimateAsync()
+        {
+            if (locationService == null)
+                return;
+
+            latestLocationEstimate = await locationService.GetCurrentEstimateAsync(default(System.Threading.CancellationToken));
+        }
+
+        /// <summary>
         /// Update the floor plan state used for rendering.
         /// </summary>
         private void UpdateFloorPlanState(SpatialPointerPose headPose, float compassHeading)
@@ -513,6 +536,8 @@ namespace HololensHermes
                 floorPlanTransformValid = true;
             }
         }
+
+        void OnLocatabilityChanged(SpatialLocator sender, Object args)
         {
             switch (sender.Locatability)
             {

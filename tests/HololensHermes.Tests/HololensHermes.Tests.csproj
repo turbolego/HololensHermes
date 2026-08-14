@@ -1,9 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
     <IsPackable>false</IsPackable>
-    <Nullable>enable</Nullable>
+    <RootNamespace>HololensHermes.Tests</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,4 +16,9 @@
     </PackageReference>
   </ItemGroup>
 
+  <!-- Link platform-neutral production logic so Linux CI validates the same
+       venue resolution, calibration, and route validation code as the UWP app. -->
+  <ItemGroup>
+    <Compile Include="../../Navigation/IndoorNavigation.cs" Link="Navigation/IndoorNavigation.cs" />
+  </ItemGroup>
 </Project>
