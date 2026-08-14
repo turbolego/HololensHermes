@@ -43,11 +43,21 @@ namespace HololensHermes.Services
         public void StoreCredentials(string telegramUsername, string telegramPassword, string telegramBotId)
         {
             var vault = new PasswordVault();
-            // Remove old entries for this key if present, then store.
-            try { vault.Remove(_storageKey); } catch { }
+            // Remove old entries for these resources before storing replacements.
+            try
+            {
+                foreach (var credential in vault.FindAllByResource(_storageKey))
+                    vault.Remove(credential);
+            }
+            catch { }
             vault.Add(new PasswordCredential(_storageKey, telegramUsername, telegramPassword));
-            // Store bot id as a separate credential (app-specific).
-            try { vault.Remove(_storageKey + ".BotId"); } catch { }
+
+            try
+            {
+                foreach (var credential in vault.FindAllByResource(_storageKey + ".BotId"))
+                    vault.Remove(credential);
+            }
+            catch { }
             vault.Add(new PasswordCredential(_storageKey + ".BotId", "botid", telegramBotId));
         }
 

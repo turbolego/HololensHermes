@@ -9,6 +9,7 @@ using SharpDX.Direct3D11;
 using SharpDX.DXGI;
 using Buffer = SharpDX.Direct3D11.Buffer;
 using Windows.Graphics.Holographic;
+using Windows.Graphics.Imaging;
 using HololensHermes.Common;
 using HololensHermes.Content;
 using HololensHermes.Services;
@@ -148,44 +149,26 @@ namespace HololensHermes.Content
                     OptionFlags = ResourceOptionFlags.None
                 });
 
-                using (var ctx = device.ImmediateContext)
+                var pixels = pixelData.DetachPixelData();
+                using (var data = SharpDX.DataStream.Create(pixels, true, false))
                 {
-                    var readBack = new Texture2D(device, new SharpDX.Direct3D11.Texture2DDescription
+                    var textureDescription = new Texture2DDescription
                     {
-                        Width = decoder.BitmapPixelWidth,
-                        Height = decoder.BitmapPixelHeight,
+                        Width = (int)decoder.PixelWidth,
+                        Height = (int)decoder.PixelHeight,
                         MipLevels = 1,
                         ArraySize = 1,
                         Format = SharpDX.DXGI.Format.B8G8R8A8_UNorm,
                         SampleDescription = new SharpDX.DXGI.SampleDescription(1, 0),
-                        Usage = ResourceUsage.Staging,
-                        BindFlags = BindFlags.None,
-                        CpuAccessFlags = CpuAccessFlags.Read,
+                        Usage = ResourceUsage.Immutable,
+                        BindFlags = BindFlags.ShaderResource,
+                        CpuAccessFlags = CpuAccessFlags.None,
                         OptionFlags = ResourceOptionFlags.None
-                    });
-
-                    ctx.CopyResource(surface, readBack);
-                    var map = ctx.MapSubresource(readBack, 0, SharpDX.DataBox.Empty);
-                    using (var mem = SharpDX.DataStream.Create(
-                        (int)(decoder.BitmapPixelWidth * decoder.BitmapPixelHeight * 4),
-                        SharpDX.DataStreamFlags.None))
-                    {
-                        var rowPitch = (int)map.RowPitch;
-                        var destPitch = (int)(decoder.BitmapPixelWidth * 4);
-                        for (int y = 0; y < decoder.BitmapPixelHeight; y++)
-                        {
-                            var srcRow = (byte*)map.DataPointer + y * rowPitch;
-                            mem.Write(srcRow, destPitch);
-                        }
-                        mem.Position = 0;
-                        ctx.UpdateSubresource(texture2D, 0, null, mem, 0, 0);
-                    }
-                    map.Dispose();
-                    ctx.UnmapSubresource(readBack, 0);
-                    readBack.Dispose();
+                    };
+                    var dataRectangle = new SharpDX.DataRectangle(data.DataPointer, (int)decoder.PixelWidth * 4);
+                    _markerTexture = new Texture2D(device, textureDescription, dataRectangle);
                 }
 
-                _markerTexture = texture2D;
                 _markerTextureSRV = new ShaderResourceView(device, _markerTexture);
             }
         }
@@ -234,18 +217,10 @@ namespace HololensHermes.Content
             verts.Add(new VertexPositionColorTexture(new Vector3(-arrowWid, 0f, hs),     new Vector3(1f, 0.9f, 0.4f), new Vector2(0f, 0f)));
             verts.Add(new VertexPositionColorTexture(new Vector3( arrowWid, 0f, hs),     new Vector3(1f, 0.9f, 0.4f), new Vector2(1f, 0f)));
 
-            using (var context = device.ImmediateContext)
-            {
-                _vertexBuffer = new Buffer(device, verts, Utilities.SizeOf<VertexPositionColorTexture>() * verts.Count,
-                    ResourceUsage.Immutable, BindFlags.VertexBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, Utilities.SizeOf<VertexPositionColorTexture>());
-            }
+            _vertexBuffer = Buffer.Create(device, BindFlags.VertexBuffer, verts.ToArray());
 
             ushort[] indices = { 0, 1, 2, 0, 2, 3, 4, 5, 6 };
-            using (var context = device.ImmediateContext)
-            {
-                _indexBuffer = new Buffer(device, indices, Utilities.SizeOf<ushort>() * indices.Length,
-                    ResourceUsage.Immutable, BindFlags.IndexBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, Utilities.SizeOf<ushort>());
-            }
+            _indexBuffer = Buffer.Create(device, BindFlags.IndexBuffer, indices);
             _indexCount = indices.Length;
         }
 
@@ -298,7 +273,7 @@ namespace HololensHermes.Content
             context.VertexShader.Set(_vertexShader);
             context.PixelShader.Set(_pixelShader);
             context.InputAssembler.InputLayout = _inputLayout;
-            context.InputAssembler.SetPrimitiveTopology(PrimitiveTopology.TriangleList);
+            context.InputAssembler.PrimitiveTopology = PrimitiveTopology.TriangleList;
 
             context.InputAssembler.SetVertexBuffers(0, new VertexBufferBinding(_vertexBuffer, Utilities.SizeOf<VertexPositionColorTexture>(), 0));
             context.InputAssembler.SetIndexBuffer(_indexBuffer, Format.R16_UInt, 0);

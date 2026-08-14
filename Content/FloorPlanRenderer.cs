@@ -122,7 +122,7 @@ namespace HololensHermes.Content
                     MipLodBias = 0f,
                     MaximumAnisotropy = 16,
                     ComparisonFunction = Comparison.Always,
-                    BorderColor = new SharpDX.Mathematics.Color4(0f, 0f, 0f, 0f),
+                    BorderColor = new SharpDX.Mathematics.Interop.RawColor4(0f, 0f, 0f, 0f),
                     MinimumLod = 0,
                     MaximumLod = float.MaxValue
                 });
@@ -177,8 +177,8 @@ namespace HololensHermes.Content
                 {
                     var textureDescription = new Texture2DDescription
                     {
-                        Width = decoder.PixelWidth,
-                        Height = decoder.PixelHeight,
+                        Width = (int)decoder.PixelWidth,
+                        Height = (int)decoder.PixelHeight,
                         MipLevels = 1,
                         ArraySize = 1,
                         Format = Format.B8G8R8A8_UNorm,
