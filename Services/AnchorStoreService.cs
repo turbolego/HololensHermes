@@ -25,7 +25,7 @@ namespace HololensHermes.Services
             if (anchor == null)
                 throw new InvalidOperationException("Unable to create a spatial anchor at the requested position.");
 
-            var store = await SpatialAnchorStore.RequestStoreAsync();
+            var store = await SpatialAnchorManager.RequestStoreAsync();
             if (store == null)
                 throw new InvalidOperationException("No spatial anchor store is available.");
 
@@ -41,7 +41,7 @@ namespace HololensHermes.Services
             if (string.IsNullOrWhiteSpace(anchorId))
                 return null;
 
-            var store = await SpatialAnchorStore.RequestStoreAsync();
+            var store = await SpatialAnchorManager.RequestStoreAsync();
             return store == null ? null : store.TryGet(anchorId);
         }
     }
