@@ -117,9 +117,9 @@ namespace HololensHermes.Services
             var x = imagePoint.X;
             var y = imagePoint.Y;
             return new Vector3(
-                Translation.X + Scale * (cosine * x - sine * y),
+                Translation.X + Scale * (cosine * (float)x - sine * (float)y),
                 0.0f,
-                Translation.Z + Scale * (sine * x + cosine * y));
+                Translation.Z + Scale * (sine * (float)x + cosine * (float)y));
         }
     }
 }

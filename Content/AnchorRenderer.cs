@@ -10,6 +10,7 @@ using SharpDX.DXGI;
 using Buffer = SharpDX.Direct3D11.Buffer;
 using Windows.Graphics.Holographic;
 using Windows.Graphics.Imaging;
+using Windows.Storage;
 using HololensHermes.Common;
 using HololensHermes.Content;
 using HololensHermes.Services;
@@ -98,7 +99,7 @@ namespace HololensHermes.Content
                     MipLodBias = 0f,
                     MaximumAnisotropy = 16,
                     ComparisonFunction = Comparison.Always,
-                    BorderColor = new SharpDX.Mathematics.Color4(0f, 0f, 0f, 0f),
+                    BorderColor = new SharpDX.Mathematics.Interop.RawColor4(0f, 0f, 0f, 0f),
                     MinimumLod = 0,
                     MaximumLod = float.MaxValue
                 });
@@ -121,33 +122,15 @@ namespace HololensHermes.Content
             var file = await LoadFileAsync(uri);
             if (file == null) return;
 
-            using (var stream = await file.OpenAsync(FileAccessMode.Read))
+            using (var stream = await file.OpenAsync(Windows.Storage.FileAccessMode.Read))
             {
                 var decoder = await Windows.Graphics.Imaging.BitmapDecoder.CreateAsync(stream);
                 var pixelData = await decoder.GetPixelDataAsync(
                     Windows.Graphics.Imaging.BitmapPixelFormat.Bgra8,
                     Windows.Graphics.Imaging.BitmapAlphaMode.Straight,
-                    Windows.Graphics.Imaging.BitmapTransform.CreateDefault(),
+                    new BitmapTransform(),
                     Windows.Graphics.Imaging.ExifOrientationMode.IgnoreExifOrientation,
                     Windows.Graphics.Imaging.ColorManagementMode.DoNotColorManage);
-
-                var surface = pixelData.Direct3DSurface;
-                var resource1 = surface as SharpDX.DXGI.Resource1;
-                if (resource1 == null) return;
-
-                var texture2D = new Texture2D(device, new SharpDX.Direct3D11.Texture2DDescription
-                {
-                    Width  = decoder.BitmapPixelWidth,
-                    Height = decoder.BitmapPixelHeight,
-                    MipLevels = 1,
-                    ArraySize = 1,
-                    Format = SharpDX.DXGI.Format.B8G8R8A8_UNorm,
-                    SampleDescription = new SharpDX.DXGI.SampleDescription(1, 0),
-                    Usage = ResourceUsage.Immutable,
-                    BindFlags = BindFlags.ShaderResource,
-                    CpuAccessFlags = CpuAccessFlags.None,
-                    OptionFlags = ResourceOptionFlags.None
-                });
 
                 var pixels = pixelData.DetachPixelData();
                 using (var data = SharpDX.DataStream.Create(pixels, true, false))

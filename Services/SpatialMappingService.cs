@@ -36,12 +36,12 @@ namespace HololensHermes.Services
         /// bounding volume. The renderer may then request individual meshes from
         /// the returned SpatialSurfaceInfo objects.
         /// </summary>
-        public Task UpdateAsync(SpatialBoundingBox boundingBox)
+        public Task UpdateAsync(SpatialCoordinateSystem coordinateSystem, SpatialBoundingBox boundingBox)
         {
-            if (_observer == null || _disposed)
+            if (_observer == null || _disposed || coordinateSystem == null)
                 return Task.CompletedTask;
 
-            _observer.SetBoundingVolume(boundingBox);
+            _observer.SetBoundingVolume(SpatialBoundingVolume.FromBox(coordinateSystem, boundingBox));
             var observedSurfaces = _observer.GetObservedSurfaces();
             _knownSurfaceIds.Clear();
             foreach (var surface in observedSurfaces)
