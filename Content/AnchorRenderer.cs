@@ -11,6 +11,7 @@ using Buffer = SharpDX.Direct3D11.Buffer;
 using Windows.Graphics.Holographic;
 using HololensHermes.Common;
 using HololensHermes.Content;
+using HololensHermes.Services;
 
 namespace HololensHermes.Content
 {
@@ -209,7 +210,7 @@ namespace HololensHermes.Content
             return file;
         }
 
-        private void BuildMarkerBuffers(Device device)
+        private void BuildMarkerBuffers(SharpDX.Direct3D11.Device device)
         {
             // A small quad for the marker + a 2D arrow pointing upward (toward target).
             // Both share the same buffer to keep the draw call count low.
