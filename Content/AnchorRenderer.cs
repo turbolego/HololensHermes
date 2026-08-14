@@ -1,10 +1,13 @@
 using System;
+using System;
 using System.Collections.Generic;
+using System.Numerics;
 using System.Threading.Tasks;
 using SharpDX;
 using SharpDX.Direct3D;
 using SharpDX.Direct3D11;
 using SharpDX.DXGI;
+using Buffer = SharpDX.Direct3D11.Buffer;
 using Windows.Graphics.Holographic;
 using HololensHermes.Common;
 using HololensHermes.Content;
@@ -22,7 +25,7 @@ namespace HololensHermes.Content
     ///
     /// Uses the same constant-buffer / shader convention as FloorPlanRenderer.
     /// </summary>
-    public class AnchorRenderer
+    internal sealed class AnchorRenderer
     {
         private readonly DeviceResources _deviceResources;
         private bool _loaded;
@@ -276,7 +279,7 @@ namespace HololensHermes.Content
 
         public void Update(StepTimer timer)
         {
-            _pulsePhase += timer.Delta.TotalSeconds * 4f; // fast pulse
+            _pulsePhase += (float)timer.ElapsedSeconds * 4f; // fast pulse
         }
 
         public void Render(HolographicFrame frame)

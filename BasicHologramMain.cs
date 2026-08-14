@@ -21,7 +21,8 @@ using HololensHermes.Services;
 using System.Threading.Tasks;
 using Windows.Foundation;
 using System.Collections.Generic;
-using SharpDX;
+using System.Numerics;
+using HololensHermes.Models;
 using HololensHermes.Navigation;
 
 #if DRAW_SAMPLE_CONTENT

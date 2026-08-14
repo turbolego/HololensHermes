@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 using Windows.Foundation;
-using SharpDX;
 
 namespace HololensHermes.Services
 {

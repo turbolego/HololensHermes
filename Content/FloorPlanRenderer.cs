@@ -1,14 +1,18 @@
 using System;
+using System;
 using System.Collections.Generic;
+using System.Numerics;
 using System.Threading.Tasks;
 using SharpDX;
 using SharpDX.Direct3D;
 using SharpDX.Direct3D11;
 using SharpDX.DXGI;
+using Buffer = SharpDX.Direct3D11.Buffer;
 using Windows.Graphics.DirectX.Direct3D11;
 using Windows.Graphics.Holographic;
 using HololensHermes.Common;
 using HololensHermes.Models;
+using HololensHermes.Services;
 
 namespace HololensHermes.Content
 {
@@ -25,7 +29,7 @@ namespace HololensHermes.Content
     ///   - Vertex layout: VertexPositionTexture (POSITION + TEXCOORD0).
     ///   - Textures are created as D3D11 Texture2D from SharpDX.Direct3D11.
     /// </summary>
-    public class FloorPlanRenderer
+    internal sealed class FloorPlanRenderer
     {
         private readonly DeviceResources _deviceResources;
         private bool _loaded;
@@ -244,7 +248,7 @@ namespace HololensHermes.Content
             return file;
         }
 
-        private void BuildQuadBuffers(Device device)
+        private void BuildQuadBuffers(SharpDX.Direct3D11.Device device)
         {
             // Quad in local space: XZ plane, Y = 0, centered at origin.
             // UVs go from (0,0) at top-left to (1,1) at bottom-right.
@@ -337,7 +341,7 @@ namespace HololensHermes.Content
         /// </summary>
         public void Update(StepTimer timer)
         {
-            _elapsedSeconds = (float)timer.Total.TotalSeconds;
+            _elapsedSeconds = (float)timer.TotalSeconds;
         }
 
         /// <summary>
@@ -352,7 +356,6 @@ namespace HololensHermes.Content
             if (context == null) return;
 
             // Update the model constant buffer.
-            var context = _deviceResources.D3DDeviceContext;
             context.UpdateSubresource(ref _model, _constantBuffer);
 
             // Set shaders and layout.

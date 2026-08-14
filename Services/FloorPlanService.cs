@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 using System.Threading.Tasks;
 using Windows.Foundation;
 using Windows.Graphics.Imaging;
 using Windows.Storage;
 using Windows.Storage.Streams;
-using SharpDX;
 using SharpDX.Direct2D1;
 using HololensHermes.Navigation;
 

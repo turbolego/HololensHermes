@@ -1,12 +1,17 @@
 using System;
+using System;
 using System.Collections.Generic;
+using System.Numerics;
 using System.Threading.Tasks;
 using SharpDX;
 using SharpDX.Direct3D11;
 using SharpDX.DXGI;
+using Buffer = SharpDX.Direct3D11.Buffer;
 using Windows.Graphics.DirectX.Direct3D11;
 using Windows.Graphics.Holographic;
 using Windows.Perception.Spatial;
+using Windows.Perception.Spatial.Surfaces;
+using Windows.UI.Input.Spatial;
 using HololensHermes.Common;
 
 namespace HololensHermes.Content
@@ -24,7 +29,7 @@ namespace HololensHermes.Content
     ///   - ViewProjectionConstantBuffer (b1) is managed by CameraResources.
     ///   - Shared vertex layout: VertexPositionColor (POSITION + COLOR0).
     /// </summary>
-    public class SpatialMappingRenderer
+    internal sealed class SpatialMappingRenderer
     {
         private readonly DeviceResources _deviceResources;
         private bool _loaded;
