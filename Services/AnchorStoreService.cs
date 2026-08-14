@@ -42,7 +42,11 @@ namespace HololensHermes.Services
                 return null;
 
             var store = await SpatialAnchorManager.RequestStoreAsync();
-            return store == null ? null : store.Get(anchorId);
+            if (store == null)
+                return null;
+
+            var anchors = store.GetAllSavedAnchors();
+            return anchors.ContainsKey(anchorId) ? anchors[anchorId] : null;
         }
     }
 }
