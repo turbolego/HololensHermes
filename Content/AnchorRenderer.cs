@@ -54,6 +54,8 @@ namespace HololensHermes.Content
         private Vector3 _targetWorldPosition;
         private float _targetLabelBillboardHeight; // not implemented as text for now
         private float _pulsePhase;
+        private GuidanceState _guidanceState = GuidanceState.Proceed;
+        private GuidanceDirection _guidanceDirection = GuidanceDirection.Ahead;
 
         public AnchorRenderer(DeviceResources deviceResources)
         {
@@ -222,6 +224,19 @@ namespace HololensHermes.Content
         }
 
         /// <summary>
+        /// Applies the shared accessibility decision to the hologram. Shape and
+        /// motion change with guidance state so color is never the sole signal.
+        /// </summary>
+        public void ApplyGuidance(AccessibleGuidanceInstruction instruction)
+        {
+            if (instruction == null)
+                return;
+
+            _guidanceState = instruction.State;
+            _guidanceDirection = instruction.Direction;
+        }
+
+        /// <summary>
         /// Update the anchor's world transform for this frame.
         /// </summary>
         public void UpdateWorldTransform(Vector3 floorPlanWorldCenter,
@@ -231,7 +246,10 @@ namespace HololensHermes.Content
             // The target is world-locked; the compass heading is used to orient any
             // directional indicator, but the marker position itself is in world space.
             // Compose model: translate to target position, apply pulse.
-            float pulse = 1f + 0.05f * (float)Math.Sin(_pulsePhase);
+            var amplitude = _guidanceState == GuidanceState.Arrived ? 0.18f :
+                            _guidanceState == GuidanceState.Approaching ? 0.10f : 0.05f;
+            var baseScale = _guidanceState == GuidanceState.Reorient ? 1.18f : 1.0f;
+            var pulse = baseScale + amplitude * (float)Math.Sin(_pulsePhase);
             var scale = Matrix4x4.CreateScale(new Vector3(pulse, pulse, pulse));
             var trans = Matrix4x4.CreateTranslation(_targetWorldPosition);
 
@@ -240,7 +258,9 @@ namespace HololensHermes.Content
 
         public void Update(StepTimer timer)
         {
-            _pulsePhase += (float)timer.ElapsedSeconds * 4f; // fast pulse
+            var speed = _guidanceState == GuidanceState.Arrived ? 7f :
+                        _guidanceState == GuidanceState.Approaching ? 5f : 4f;
+            _pulsePhase += (float)timer.ElapsedSeconds * speed;
         }
 
         public void Render(HolographicFrame frame)

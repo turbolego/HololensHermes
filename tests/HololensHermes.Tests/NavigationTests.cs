@@ -242,4 +242,90 @@ namespace HololensHermes.Tests
             }));
         }
     }
+
+    public sealed class AccessibleGuidanceTests
+    {
+        private static NavigationRoute RouteWithSingleGoal(double x, double y)
+        {
+            return new NavigationRoute(new List<NavigationWaypoint>
+            {
+                new NavigationWaypoint("Accessible checkout", "ground", new PlanPoint(x, y), true)
+            });
+        }
+
+        [Fact]
+        public void guidance_requires_calibration_before_movement()
+        {
+            var instruction = AccessibleGuidanceEngine.Evaluate(
+                RouteWithSingleGoal(10.0, 0.0), 0, new PlanPoint(0.0, 0.0), 0.0, 1.0, true, false);
+
+            Assert.Equal(GuidanceState.CalibrationRequired, instruction.State);
+            Assert.False(instruction.IsMovementSafe);
+            Assert.Contains("calibration", instruction.SpokenPrompt, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public void guidance_pauses_when_positional_tracking_is_unavailable()
+        {
+            var instruction = AccessibleGuidanceEngine.Evaluate(
+                RouteWithSingleGoal(10.0, 0.0), 0, new PlanPoint(0.0, 0.0), 0.0, 1.0, false, true);
+
+            Assert.Equal(GuidanceState.Unavailable, instruction.State);
+            Assert.False(instruction.IsMovementSafe);
+            Assert.Contains("Stop", instruction.SpokenPrompt);
+        }
+
+        [Fact]
+        public void guidance_uses_ahead_cue_when_target_is_in_front_of_user()
+        {
+            var instruction = AccessibleGuidanceEngine.Evaluate(
+                RouteWithSingleGoal(7.0, 0.0), 0, new PlanPoint(0.0, 0.0), 0.0, 1.0, true, true);
+
+            Assert.Equal(GuidanceState.Proceed, instruction.State);
+            Assert.Equal(GuidanceDirection.Ahead, instruction.Direction);
+            Assert.Equal("forward-chevron", instruction.VisualPattern);
+            Assert.Contains("Go ahead", instruction.SpokenPrompt);
+        }
+
+        [Fact]
+        public void guidance_uses_turn_direction_instead_of_color_only_feedback()
+        {
+            var instruction = AccessibleGuidanceEngine.Evaluate(
+                RouteWithSingleGoal(0.0, 8.0), 0, new PlanPoint(0.0, 0.0), 0.0, 1.0, true, true);
+
+            Assert.Equal(GuidanceState.Reorient, instruction.State);
+            Assert.Equal(GuidanceDirection.Right, instruction.Direction);
+            Assert.Equal("turn-chevron", instruction.VisualPattern);
+            Assert.Contains("Turn right", instruction.SpokenPrompt);
+        }
+
+        [Fact]
+        public void guidance_announces_arrival_within_goal_radius()
+        {
+            var instruction = AccessibleGuidanceEngine.Evaluate(
+                RouteWithSingleGoal(0.4, 0.0), 0, new PlanPoint(0.0, 0.0), 0.0, 1.0, true, true);
+
+            Assert.Equal(GuidanceState.Arrived, instruction.State);
+            Assert.Equal(GuidanceDirection.None, instruction.Direction);
+            Assert.Equal("goal-beacon", instruction.VisualPattern);
+            Assert.Contains("arrived", instruction.SpokenPrompt, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public void intermediate_waypoint_advances_without_announcing_final_arrival()
+        {
+            var route = new NavigationRoute(new List<NavigationWaypoint>
+            {
+                new NavigationWaypoint("Aisle transition", "ground", new PlanPoint(0.3, 0.0), false),
+                new NavigationWaypoint("Accessible checkout", "ground", new PlanPoint(8.0, 0.0), true)
+            });
+
+            var instruction = AccessibleGuidanceEngine.Evaluate(
+                route, 0, new PlanPoint(0.0, 0.0), 0.0, 1.0, true, true);
+
+            Assert.Equal(GuidanceState.WaypointReached, instruction.State);
+            Assert.True(instruction.ShouldAdvanceWaypoint);
+            Assert.DoesNotContain("arrived", instruction.SpokenPrompt, StringComparison.OrdinalIgnoreCase);
+        }
+    }
 }

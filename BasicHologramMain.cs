@@ -50,6 +50,10 @@ namespace HololensHermes
         private CompassService compassService;
         private LocationService locationService;
         private LocationEstimate latestLocationEstimate;
+        private GuidanceFeedbackService guidanceFeedbackService;
+        private NavigationRoute activeRoute;
+        private int activeWaypointIndex;
+        private AccessibleGuidanceInstruction activeGuidanceInstruction;
 
         // Floor plan state passed from CalibrationService + FloorPlanService each frame.
         private Vector3 floorPlanWorldCenter = Vector3.Zero;
@@ -150,6 +154,7 @@ namespace HololensHermes
             // estimate is used only to select a candidate venue; calibration and
             // spatial anchors remain the source of truth for indoor placement.
             locationService = new LocationService();
+            guidanceFeedbackService = new GuidanceFeedbackService();
             var locationRefresh = RefreshLocationEstimateAsync();
 #endif
 
@@ -216,6 +221,11 @@ namespace HololensHermes
                 compassService.Dispose();
                 compassService = null;
             }
+            if (guidanceFeedbackService != null)
+            {
+                guidanceFeedbackService.Dispose();
+                guidanceFeedbackService = null;
+            }
         }
 
         /// <summary>
@@ -267,6 +277,7 @@ namespace HololensHermes
 
                     // Pass per-frame state to the renderers.
                     UpdateFloorPlanState(headPose, compassHeading);
+                    UpdateAccessibleGuidance(headPose);
                     floorPlanRenderer.UpdateWorldTransform(floorPlanWorldCenter, floorPlanTransform, compassHeading);
                     anchorRenderer.UpdateWorldTransform(floorPlanWorldCenter, floorPlanTransform, compassHeading);
                     spatialMappingRenderer.Update(headPose);
@@ -476,6 +487,18 @@ namespace HololensHermes
             //
         }
 
+        /// <summary>
+        /// Receives a validated indoor route from the Hermes planner. The route is
+        /// represented through intermediate world-locked targets rather than a
+        /// single distant beacon, making direction changes reachable and explicit.
+        /// </summary>
+        public void SetNavigationRoute(NavigationRoute route)
+        {
+            activeRoute = route;
+            activeWaypointIndex = 0;
+            activeGuidanceInstruction = null;
+        }
+
         public void OnPointerPressed()
         {
             this.pointerPressed = true;
@@ -536,6 +559,70 @@ namespace HololensHermes
                 };
                 floorPlanTransformValid = true;
             }
+        }
+
+        /// <summary>
+        /// Converts head position and facing into calibrated plan coordinates,
+        /// then drives redundant visual and spoken guidance from one shared decision.
+        /// </summary>
+        private void UpdateAccessibleGuidance(SpatialPointerPose headPose)
+        {
+            if (activeRoute == null || activeWaypointIndex >= activeRoute.Waypoints.Count)
+                return;
+
+            var trackingActive = spatialLocator != null &&
+                                 spatialLocator.Locatability == SpatialLocatability.PositionalTrackingActive;
+            var userPlanPosition = new PlanPoint(0.0, 0.0);
+            var headingRadians = 0.0;
+
+            if (trackingActive && floorPlanTransformValid && headPose != null)
+            {
+                var userWorldPosition = headPose.Head.Position;
+                userPlanPosition = ToPlanPoint(floorPlanTransform.MapWorldPointToImage(userWorldPosition));
+                var forwardProbe = userWorldPosition + headPose.Head.ForwardDirection;
+                var forwardPlanPosition = ToPlanPoint(floorPlanTransform.MapWorldPointToImage(forwardProbe));
+                headingRadians = Math.Atan2(
+                    forwardPlanPosition.Y - userPlanPosition.Y,
+                    forwardPlanPosition.X - userPlanPosition.X);
+            }
+
+            activeGuidanceInstruction = AccessibleGuidanceEngine.Evaluate(
+                activeRoute,
+                activeWaypointIndex,
+                userPlanPosition,
+                headingRadians,
+                Math.Max(0.0001, floorPlanTransform.Scale),
+                trackingActive,
+                floorPlanTransformValid);
+
+            if (activeGuidanceInstruction.IsMovementSafe && floorPlanTransformValid)
+            {
+                var target = floorPlanTransform.MapImagePointToWorld(
+                    new Point(activeGuidanceInstruction.Waypoint.Location.X, activeGuidanceInstruction.Waypoint.Location.Y));
+                anchorRenderer.SetTarget(target, activeGuidanceInstruction.Waypoint.Label);
+                anchorRenderer.ApplyGuidance(activeGuidanceInstruction);
+            }
+            else
+            {
+                anchorRenderer.SetInvisible();
+            }
+
+            var urgent = activeGuidanceInstruction.State == GuidanceState.Unavailable ||
+                         activeGuidanceInstruction.State == GuidanceState.CalibrationRequired ||
+                         activeGuidanceInstruction.State == GuidanceState.Arrived;
+            var announcement = guidanceFeedbackService?.AnnounceIfChangedAsync(
+                activeGuidanceInstruction.SpokenPrompt,
+                urgent);
+
+            if (activeGuidanceInstruction.ShouldAdvanceWaypoint)
+            {
+                activeWaypointIndex++;
+            }
+        }
+
+        private static PlanPoint ToPlanPoint(Point point)
+        {
+            return new PlanPoint(point.X, point.Y);
         }
 
         void OnLocatabilityChanged(SpatialLocator sender, Object args)

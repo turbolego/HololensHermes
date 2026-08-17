@@ -121,5 +121,20 @@ namespace HololensHermes.Services
                 0.0f,
                 Translation.Z + Scale * (sine * (float)x + cosine * (float)y));
         }
+
+        /// <summary>Maps a HoloLens world X/Z position into calibrated plan coordinates.</summary>
+        public Point MapWorldPointToImage(Vector3 worldPoint)
+        {
+            if (Scale <= 0.0f)
+                throw new InvalidOperationException("A positive floor-plan scale is required.");
+
+            var dx = (worldPoint.X - Translation.X) / Scale;
+            var dz = (worldPoint.Z - Translation.Z) / Scale;
+            var cosine = (float)Math.Cos(RotationRadians);
+            var sine = (float)Math.Sin(RotationRadians);
+            return new Point(
+                cosine * dx + sine * dz,
+                -sine * dx + cosine * dz);
+        }
     }
 }

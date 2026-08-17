@@ -19,6 +19,7 @@
   <!-- Link platform-neutral production logic so Linux CI validates the same
        venue resolution, calibration, and route validation code as the UWP app. -->
   <ItemGroup>
+    <Compile Include="../../Navigation/AccessibleGuidance.cs" Link="Navigation/AccessibleGuidance.cs" />
     <Compile Include="../../Navigation/IndoorNavigation.cs" Link="Navigation/IndoorNavigation.cs" />
   </ItemGroup>
 </Project>
