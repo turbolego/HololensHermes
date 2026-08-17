@@ -13,6 +13,7 @@ using Windows.Graphics.Imaging;
 using Windows.Storage;
 using HololensHermes.Common;
 using HololensHermes.Content;
+using HololensHermes.Navigation;
 using HololensHermes.Services;
 
 namespace HololensHermes.Content
