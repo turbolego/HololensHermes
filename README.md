@@ -5,18 +5,20 @@
 </a>
 
 [HoloLens Hermès](https://apps.microsoft.com/detail/9nr3z5g9gbj7?hl=en-GB&gl=NO) —
-indoor spatial assistant for **Microsoft HoloLens 1**, connected to **Hermes** via Telegram.
+a **Microsoft HoloLens 1** prototype for spatial guidance and a future Hermes
+agent interface.
 
-The app uses HoloLens 1's on-device spatial mapping and world-locked anchors to place
-2D floor plans and target markers in the real world, and connects to Hermes over Telegram
-for goal-directed indoor navigation (e.g. find a book in the library, find a furniture
-section in a store).
+The repository contains a Direct3D holographic rendering scaffold and
+platform-neutral venue-selection, calibration, and accessible-guidance logic.
+The Telegram/Hermes, camera, voice-input, and response-presentation flows are
+not yet wired into the running app. See [AGENT_INTERFACE_PLAN.md](./AGENT_INTERFACE_PLAN.md)
+for the implementation plan and acceptance criteria.
 
 ---
 
 ## Contents
 
-- [What You Will See](#what-you-will-see)
+- [Current Status](#current-status)
 - [How It Works](#how-it-works)
 - [Project Structure](#project-structure)
 - [Prerequisites](#prerequisites)
@@ -27,31 +29,37 @@ section in a store).
 
 ---
 
-## What You Will See
+## Current Status
 
-Put on the HoloLens and launch the app:
+The current app is an incomplete prototype, not yet a usable Hermes chat client.
+The repository includes:
 
-- A 2D floor plan overlays the real floor, world-locked and compass-rotated (building
-  orientation stays correct as you turn).
-- Tap a real surface to ask Hermes "find X" — a pulsing target marker + arrow appears,
-  world-locked at the target location on the floor plan.
-- The floor plan + target markers persist across sessions via `SpatialAnchorStore`.
-- Telegram companion: you can query and report from your phone; Hermes answers with a
-  floor-plan hotspot and the HoloLens shows the world-locked target.
+- HoloLens 1 Direct3D rendering, spatial mapping, floor-plan, and target-marker
+  components.
+- Platform-neutral venue resolution, multi-point calibration, route validation,
+  and accessible guidance logic.
+- A speech-synthesis helper and prototype Hermes/Telegram service wrappers.
+- Cross-platform tests for the navigation logic, including a deterministic
+  end-to-end venue-to-guidance journey.
+
+The running app does not yet load a floor plan or route, send messages to
+Hermes, capture/upload photos or voice, receive agent replies, or display
+conversation text. Those are planned in
+[AGENT_INTERFACE_PLAN.md](./AGENT_INTERFACE_PLAN.md).
 
 ---
 
 ## How It Works
 
-| Step | Detail |
+| Component | Current implementation |
 |------|--------|
-| **Floor plan** | 2D floor-plan image (PNG from the venue's website) is loaded as a texture, scaled to real meters by calibration, and rendered as a world-locked quad on the floor |
-| **Calibration** | Multi-point (3+): the user walks to known floor-plan points and taps; the app solves the affine transform from image pixels → world meters |
-| **Spatial mapping** | `SpatialSurfaceObserver` keeps the room/store mesh up to date; the user can toggle mesh visualization to check coverage |
-| **Targets** | Hermes API resolves a goal ("find the philosophy section", "find MALM dresser") to a floor-plan position; the app places a `SpatialAnchor` there and shows a pulsing marker + arrow |
-| **Compass** | `CompassService` (IMU magnetometer) rotates the floor plan + arrow so north stays north as the user turns |
-| **Telegram** | The app stores the user's Telegram username + password + bot id in the Windows Credential Vault; the bot id (BotFather token) is used to call the Telegram Bot API over HTTPS |
-| **Hermes** | `HermesApiService` calls the Hermes backend over HTTPS (goal resolution, floor-plan metadata) using the same `HttpClient` + `Windows.Data.Json` pattern as the existing viewers |
+| **Floor plan** | A renderer can draw a floor-plan image as a texture, but no floor plan is loaded by the running app. |
+| **Calibration** | Platform-neutral logic fits a transform from 3+ image/world point pairs; an in-app calibration flow is not connected. |
+| **Spatial mapping** | Spatial-mapping service and renderer components exist; an in-app mesh toggle is not connected. |
+| **Targets** | Route validation, guidance logic, and an anchor renderer exist; Hermes goal resolution and route loading are not connected. |
+| **Compass** | `CompassService` reads heading for renderer transforms; the running app has no loaded floor plan to rotate. |
+| **Telegram** | `TelegramService` is an incomplete direct Bot API prototype; it is not connected to the running interaction flow. The production design should use an authenticated relay and keep the bot token off-device. |
+| **Hermes** | `HermesApiService` contains prototype goal/floor-plan/feedback calls, but is not connected to the running interaction flow and has no agreed conversational-agent contract yet. |
 
 No external render engine — all rendering is custom Direct3D 11 with SharpDX (forked from the HololensSatelliteViewer holographic pipeline).
 
@@ -86,6 +94,8 @@ HololensHermes/
 │   └── CompassService.cs      # IMU magnetometer heading (reused from viewer scaffold)
 ├── privacy/
 │   └── index.html              # Privacy policy (served via GitHub Pages)
+├── tests/HololensHermes.Tests/ # Cross-platform tests for platform-neutral logic
+├── AGENT_INTERFACE_PLAN.md     # Remaining work and end-to-end acceptance criteria
 ├── Properties/
 │   └── AssemblyInfo.cs
 ├── BasicHologramMain.cs        # App lifecycle + holographic frame loop
@@ -225,11 +235,14 @@ Triggered by a `v*.*.*` git tag. Same build as above plus:
 
 ## Privacy Policy
 
-This app does not collect or transmit personal information except for the
-purpose of goal-directed indoor navigation with Hermes. The location, webcam,
-and microphone capabilities are used exclusively for HoloLens platform
-operation. Telegram credentials (username, password, bot id) are stored
-locally in the Windows Credential Vault and are never transmitted except
-as needed to call the Telegram Bot API on the user's behalf.
+This prototype requests a coarse Windows location estimate at startup and
+stores it in memory; the running app does not currently send it to Hermes.
+The Telegram and Hermes service wrappers can make HTTPS requests if called,
+but are not connected to the running interaction flow. The Telegram prototype
+stores credentials in the Windows Credential Vault and includes its bot token
+in Telegram API requests when used. No photo or voice recording/upload flow is
+implemented. See the [privacy policy](./privacy/index.html) for the current
+behavior and the [agent interface plan](./AGENT_INTERFACE_PLAN.md) for the
+privacy work required before adding media transmission.
 
-Full policy: https://turbolego.github.io/HololensHermes/privacy/
+Published policy: https://turbolego.github.io/HololensHermes/privacy/

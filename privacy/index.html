@@ -1,26 +1,41 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8"><title>Privacy Policy - HololensSatelliteViewer</title></head>
+<head><meta charset="UTF-8"><title>Privacy Policy - HololensHermes</title></head>
 <body>
 <article>
-<h1>Privacy Policy for HololensSatelliteViewer</h1>
-<p><strong>Last updated:</strong> July 28, 2026</p>
+<h1>Privacy Policy for HololensHermes</h1>
+<p><strong>Last updated:</strong> October 26, 2026</p>
 
-<h2>Data Collection</h2>
-<p>HololensSatelliteViewer does <strong>not</strong> access, collect, store, or transmit any personal information.</p>
+<h2>Current prototype behavior</h2>
+<p>HololensHermes is an incomplete HoloLens 1 prototype. Its Telegram and Hermes
+service wrappers are not connected to the running interaction flow. The app
+does not currently capture or upload photos or voice recordings.</p>
 <ul>
-<li>The <code>location</code> capability is used exclusively to compute satellite positions relative to the device — coordinates never leave the device.</li>
-<li>The <code>webcam</code> capability is used exclusively for HoloLens spatial mapping and head tracking — no camera images are captured, recorded, or transmitted.</li>
-<li>The <code>microphone</code> capability is used exclusively for HoloLens voice commands and spatial audio — no audio is recorded or transmitted.</li>
-<li>The <code>internetClient</code> capability is used only to download public satellite orbital data (TLEs) from CelesTrak.org.</li>
+<li>The app requests a coarse location estimate through Windows location services and keeps the latest estimate in memory. The running app does not currently send this estimate to Hermes.</li>
+<li>Spatial mapping and head tracking use HoloLens sensors. The app does not upload spatial meshes.</li>
+<li>The package declares webcam and microphone capabilities, but the app has no photo-capture or voice-recording/upload flow. Speech feedback is synthesized locally on the device.</li>
+<li>The package declares internet access. The Telegram and Hermes service wrappers can send HTTPS requests when called; they are not currently invoked by the running interaction flow.</li>
 </ul>
 
-<h2>Data Sharing</h2>
-<p>No data of any kind is shared with third parties.</p>
+<h2>Credentials and network services</h2>
+<p>The Telegram prototype can store a Telegram username, password, and bot
+token in the Windows Credential Vault. If its send method is invoked, the bot
+token is sent as part of the HTTPS request to Telegram and the message is sent
+to a chat ID already present in the vault. The current app has no connected
+credential or chat setup flow. The Hermes prototype can send goal text and
+optional coarse location fields to a configured Hermes endpoint when its
+methods are invoked.</p>
+
+<h2>Future features</h2>
+<p>Photo upload, voice recording/upload, inbound agent replies, and a connected
+conversation flow are not implemented. Before enabling them, this policy must
+be updated to identify the receiving services, data sent, retention, and user
+consent choices. Do not send sensitive information or production credentials
+through this prototype.</p>
 
 <h2>Contact</h2>
 <p>If you have questions, open an issue at:<br>
-<a href="https://github.com/turbolego/HololensSatelliteViewer">github.com/turbolego/HololensSatelliteViewer</a></p>
+<a href="https://github.com/turbolego/HololensHermes">github.com/turbolego/HololensHermes</a></p>
 </article>
 </body>
 </html>
